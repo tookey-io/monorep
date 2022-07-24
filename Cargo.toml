@@ -1,0 +1,11 @@
+[profile.release]
+lto = true
+codegen-units = 1
+
+[workspace]
+members = [
+    "tss",
+    "tss-ffi",
+    "manager",
+    "signer"
+]
