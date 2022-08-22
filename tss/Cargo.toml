@@ -9,7 +9,9 @@ edition = "2021"
 crate-type = ["lib"]
 
 [features]
-default = ["curv-kzen/rust-gmp-kzen"]
+default = ["gmp"]
+bigint = ["curv-kzen/num-bigint"]
+gmp = ["curv-kzen/rust-gmp-kzen"]
 
 [dependencies]
 subtle = { version = "2" }

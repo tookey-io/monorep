@@ -1,4 +1,5 @@
 use std::collections::hash_map::{Entry, HashMap};
+use std::process::id;
 use std::sync::{
     atomic::{AtomicU16, Ordering},
     Arc,
@@ -40,11 +41,13 @@ async fn subscribe(
 async fn issue_idx(db: &State<Db>, room_id: &str) -> Json<IssuedUniqueIdx> {
     let room = db.get_room_or_create_empty(room_id).await;
     let idx = room.issue_unique_idx();
+    println!("New index is {}", idx);
     Json::from(IssuedUniqueIdx { unique_idx: idx })
 }
 
 #[rocket::post("/rooms/<room_id>/broadcast", data = "<message>")]
 async fn broadcast(db: &State<Db>, room_id: &str, message: String) -> Status {
+    println!("Data to broadcast: {}", message);
     let room = db.get_room_or_create_empty(room_id).await;
     room.publish(message).await;
     Status::Ok

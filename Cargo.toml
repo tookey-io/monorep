@@ -7,5 +7,7 @@ members = [
     "tss",
     "tss-ffi",
     "manager",
-    "signer"
+    "cli",
+    "ceremonies",
+    "adapters/*"
 ]

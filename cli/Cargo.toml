@@ -1,0 +1,34 @@
+[package]
+name = "tss_cli"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["lib"]
+
+[feature]
+
+[dependencies]
+anyhow = "1"
+async-sse = "5"
+curv-kzen = { version = "0.9", default-features = false }
+ethereum-types = { version = "0.12.1" }  
+futures = "0.3"
+round-based = { version = "0.1.4", features = ["dev"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+structopt = "0.3"
+surf = "2"
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "macros", "fs", "io-util" ] }
+tss = { path = "../tss", default_features = false }
+tss_ceremonies = { path = "../ceremonies", default_features = false }
+
+[[bin]]
+name = "sign"
+path = "src/sign.rs"
+
+[[bin]]
+name = "keygen"
+path = "src/keygen.rs"
