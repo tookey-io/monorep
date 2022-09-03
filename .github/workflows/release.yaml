@@ -1,0 +1,42 @@
+on:
+  push:
+    branches:
+      - master
+      - feature/ci-cd
+
+jobs:
+  release:
+    name: Release ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [ x86_64-apple-darwin, x86_64-unknown-linux-musl, x86_64-pc-windows-gnu ]
+        package: [ manager, tss_cli ]
+        include:
+          - package: tss_cli
+            binary: sign
+          - package: tss_cli
+            binary: keygen 
+          - package: manager
+            binary: manager
+    steps:
+      - uses: actions/checkout@master
+      - name: Compile
+        uses: Shogan/rust-musl-action@v1.0.2
+        with:
+          args: cargo build --target ${{ matrix.target }} --release
+      - name: Upload ${{ matrix.target }} binary to release
+        uses: Spikatrix/upload-release-action@b713c4b73f0a8ddda515820c124efc6538685492
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          asset_name: ${{ matrix.binary }}-${{ matrix.target }}
+          target_commit: ${{ github.sha }}
+          tag: v${{ env.RELEASE_VERSION }}
+          release_name: v${{ env.RELEASE_VERSION }}
+          prerelease: false
+          overwrite: true
+          body: ${{ matrix.binary }} ${{ matrix.target }} release
