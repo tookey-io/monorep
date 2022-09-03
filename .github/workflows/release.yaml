@@ -6,14 +6,15 @@ on:
 
 jobs:
   release:
-    name: Release ${{ matrix.target }}
+    name: Release ${{ matrix.package }}-${{ matrix.binary}}-${{ matrix.target }} 
     runs-on: ubuntu-latest
     env:
       CARGO_TERM_COLOR: always
     strategy:
       fail-fast: false
       matrix:
-        target: [ x86_64-apple-darwin, x86_64-unknown-linux-musl, x86_64-pc-windows-gnu ]
+        # target: [ x86_64-apple-darwin, x86_64-unknown-linux-musl, x86_64-pc-windows-gnu ]
+        target: [ x86_64-unknown-linux-musl ]
         package: [ manager, tss_cli ]
         include:
           - package: tss_cli
