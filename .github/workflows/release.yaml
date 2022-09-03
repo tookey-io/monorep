@@ -38,9 +38,15 @@ jobs:
             os: ubuntu-latest
           - target: x86_64-pc-windows-gnu
             os: windows-latest
+            extension: .exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@master
+      - uses: SebRollen/toml-action@v1.0.0
+        id: read_version
+        with:
+          file: 'cli/Cargo.toml'
+          field: 'package.version'
       - name: Setup target
         run: |
           rustup target add ${{ matrix.target }}
@@ -51,11 +57,11 @@ jobs:
         uses: Spikatrix/upload-release-action@b713c4b73f0a8ddda515820c124efc6538685492
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/${{ matrix.target }}/release/${{ matrix.component.binary }}
-          asset_name: ${{ matrix.component.binary }}-${{ matrix.target }}
+          file: target/${{ matrix.target }}/release/${{ matrix.component.binary }}${{ matrix.extension }}
+          asset_name: ${{ matrix.component.binary }}-${{ matrix.target }}${{ matrix.extension }}
           target_commit: ${{ github.sha }}
-          tag: v${{ env.RELEASE_VERSION }}
-          release_name: v${{ env.RELEASE_VERSION }}
+          tag: v${{ steps.read_version.outputs.value }}
+          release_name: v${{ steps.read_version.outputs.value }}
           prerelease: false
           overwrite: true
           body: ${{ matrix.component.binary }} ${{ matrix.target }} release
