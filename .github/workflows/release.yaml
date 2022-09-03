@@ -23,33 +23,39 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # target: [ x86_64-apple-darwin, x86_64-unknown-linux-musl, x86_64-pc-windows-gnu ]
-        platform: [ 
-          { target: "x86_64-unknown-linux-gnu", os: "ubuntu-latest" },
-          { target: "x86_64-apple-darwin", os: "macos-latest" },
-          { target: "aarch64-apple-darwin", os: "macos-latest" },
-          { target: "x86_64-pc-windows-gnu", os: "windows-latest" }
-        ]
+        target: [ x86_64-apple-darwin, x86_64-unknown-linux-gnu, x86_64-pc-windows-gnu, aarch64-apple-darwin ]
         component: [
           { package: "tss_cli", binary: "sign" },
           { package: "tss_cli", binary: "keygen" },
           { package: "manager", binary: "manager" },
         ]
-    runs-on: ${{ matrix.platform.os }}
+        include: 
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-gnu
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@master
+      - name: Setup target
+        run: |
+          rustup target add ${{ matrix.target }}
       - name: Compile
         run: |
-          cargo build --target ${{ matrix.platform.target }} --release --package ${{ matrix.component.package }} --bin ${{ matrix.component.binary }}
-      - name: Upload ${{ matrix.platform.target }} binary to release
+          cargo build --target ${{ matrix.target }} --release --package ${{ matrix.component.package }} --bin ${{ matrix.component.binary }}
+      - name: Upload ${{ matrix.target }} binary to release
         uses: Spikatrix/upload-release-action@b713c4b73f0a8ddda515820c124efc6538685492
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/${{ matrix.platform.target }}/release/${{ matrix.component.binary }}
-          asset_name: ${{ matrix.component.binary }}-${{ matrix.platform.target }}
+          file: target/${{ matrix.target }}/release/${{ matrix.component.binary }}
+          asset_name: ${{ matrix.component.binary }}-${{ matrix.target }}
           target_commit: ${{ github.sha }}
           tag: v${{ env.RELEASE_VERSION }}
           release_name: v${{ env.RELEASE_VERSION }}
           prerelease: false
           overwrite: true
-          body: ${{ matrix.component.binary }} ${{ matrix.platform.target }} release
+          body: ${{ matrix.component.binary }} ${{ matrix.target }} release
