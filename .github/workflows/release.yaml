@@ -5,6 +5,17 @@ on:
       - feature/ci-cd
 
 jobs:
+  cancel-previous:
+    name: Cancel redundant jobs
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    if: github.ref != 'refs/heads/main'
+    steps:
+      - uses: styfle/cancel-workflow-action@0.10.0
+        with:
+          access_token: ${{ secrets.GITHUB_TOKEN }}
+          all_but_latest: true # can cancel workflows scheduled later
+  
   release:
     name: Release ${{ matrix.package }}-${{ matrix.binary}}-${{ matrix.target }} 
     runs-on: ubuntu-latest
@@ -14,30 +25,29 @@ jobs:
       fail-fast: false
       matrix:
         # target: [ x86_64-apple-darwin, x86_64-unknown-linux-musl, x86_64-pc-windows-gnu ]
-        target: [ x86_64-unknown-linux-musl ]
-        package: [ manager, tss_cli ]
-        include:
-          - package: tss_cli
-            binary: sign
-          - package: tss_cli
-            binary: keygen 
-          - package: manager
-            binary: manager
+        target: [ x86_64-unknown-linux-gnu, x86_64-apple-darwin, x86_64-pc-windows-gnu, aarch64-apple-darwin ]
+        component: [
+          { package: "tss_cli", binary: "sign" },
+          { package: "tss_cli", binary: "keygen" },
+          { package: "manager", binary: "manager" },
+        ]
     steps:
       - uses: actions/checkout@master
+      - uses: ./.github/actions/setup/
+        env:
+          RUST_TARGET: ${{ matrix.target }}
       - name: Compile
-        uses: Shogan/rust-musl-action@v1.0.2
-        with:
-          args: cargo build --target ${{ matrix.target }} --release
+        run: |
+          cargo build --target ${{ matrix.target }} --release --package ${{ matrix.component.package }} --bin ${{ matrix.component.binary }}
       - name: Upload ${{ matrix.target }} binary to release
         uses: Spikatrix/upload-release-action@b713c4b73f0a8ddda515820c124efc6538685492
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: target/${{ matrix.target }}/release/${{ matrix.binary }}
-          asset_name: ${{ matrix.binary }}-${{ matrix.target }}
+          file: target/${{ matrix.target }}/release/${{ matrix.component.binary }}
+          asset_name: ${{ matrix.component.binary }}-${{ matrix.target }}
           target_commit: ${{ github.sha }}
           tag: v${{ env.RELEASE_VERSION }}
           release_name: v${{ env.RELEASE_VERSION }}
           prerelease: false
           overwrite: true
-          body: ${{ matrix.binary }} ${{ matrix.target }} release
+          body: ${{ matrix.component.binary }} ${{ matrix.target }} release
