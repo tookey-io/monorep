@@ -1,0 +1,46 @@
+name: "Setup"
+description: "Setup"
+runs:
+  using: "composite"
+  steps:
+    # System Dependencies
+    - name: Install software
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libudev-dev
+        pip3 install yq
+    # Rust
+    - name: Cache Cargo registry + index
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+        key: cargo-${{ runner.os }}-v0000-${{ hashFiles('**/Cargo.lock') }}
+    - name: Install Rust toolchain
+      shell: bash
+      run: |
+        rustup toolchain add $(cat rust-toolchain) --profile minimal
+
+    - name: Install Rust target
+      shell: bash
+      run: |
+        rustup target add ${{ env.RUST_TARGET }}
+
+    # Temporary disable nodejs (not needed yet)
+    # Node.js
+    # - name: Get npm cache directory
+    #   uses: actions/cache@v2
+    #   with:
+    #     path: |
+    #       ~/.npm/
+    #     key: npm-${{ runner.os }}-v0000-${{ hashFiles('**/package-lock.json') }}
+    # - name: Install Node.js@16
+    #   uses: actions/setup-node@v2
+    #   with:
+    #     node-version: '16'
+    # - name: Install Node.js modules
+    #   shell: bash
+    #   run: npm ci
