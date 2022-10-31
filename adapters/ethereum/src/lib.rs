@@ -116,7 +116,7 @@ pub fn hash_to_bytes(hash: String) -> anyhow::Result<H256> {
 
 /// Gets the checksummed address of a H160 hash
 pub fn checksum(address: Address) -> String {
-    let address = format!("{address:x}");
+    let address = format!("{:x}", address);
     let address_hash = format!("{:x}", H256::from(keccak256(address.as_bytes())));
 
     address
