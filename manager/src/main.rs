@@ -3,13 +3,12 @@ mod sign;
 mod util;
 
 use std::env;
-use std::future::Future;
 use std::str::FromStr;
 use anyhow::Context;
 use bb8::{ManageConnection, Pool};
 use bb8_lapin::lapin::{ConnectionProperties, ExchangeKind};
 use bb8_lapin::lapin::message::Delivery;
-use bb8_lapin::lapin::options::{BasicAckOptions, BasicConsumeOptions, BasicNackOptions, QueueBindOptions};
+use bb8_lapin::lapin::options::{BasicAckOptions, BasicConsumeOptions, BasicNackOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
 use bb8_lapin::lapin::types::FieldTable;
 use bb8_lapin::LapinConnectionManager;
 use futures::StreamExt;
@@ -29,16 +28,16 @@ async fn main() -> anyhow::Result<()> {
     .init();
 
   let manager = LapinConnectionManager::new("amqp://guest:guest@127.0.0.1:5672/", ConnectionProperties::default());
+  let conn = manager.connect().await?;
   let pool = Pool::builder()
     .max_size(10)
     .build(manager)
     .await?;
 
-  let conn = manager.connect().await?;
   let channel = conn.create_channel().await?;
 
-  let rabbit_exchange = dotenv::var("AMQP_EXCHANGE").unwrap_or(String::from("amq.topic"));
-  let rabbit_queue = dotenv::var("AMQP_QUEUE").unwrap_or(String::from("manager"));
+  let rabbit_exchange = env::var("AMQP_EXCHANGE").unwrap_or(String::from("amq.topic"));
+  let rabbit_queue = env::var("AMQP_QUEUE").unwrap_or(String::from("manager"));
 
   if rabbit_exchange != "amqp.topic" {
     channel.exchange_declare(rabbit_exchange.as_str(), ExchangeKind::Topic, exchange_options(), FieldTable::default()).await?;
@@ -83,4 +82,38 @@ async fn handle(data: Vec<u8>, pool: AmqpPool) -> anyhow::Result<()> {
   }
 
   Ok(())
+}
+
+fn queue_options() -> QueueDeclareOptions {
+  let env = env::var("APP_ENV").unwrap_or(String::from("production"));
+
+  if env == "test" {
+    QueueDeclareOptions {
+      durable: false,
+      auto_delete: true,
+
+      passive: false,
+      exclusive: false,
+      nowait: false
+    }
+  } else {
+    QueueDeclareOptions {
+      durable: true,
+      auto_delete: false,
+
+      passive: false,
+      exclusive: false,
+      nowait: false
+    }
+  }
+}
+
+fn exchange_options() -> ExchangeDeclareOptions {
+  ExchangeDeclareOptions {
+    passive: false,
+    durable: true,
+    auto_delete: false,
+    internal: false,
+    nowait: false
+  }
 }

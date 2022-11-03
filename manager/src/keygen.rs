@@ -1,8 +1,11 @@
 use std::env;
 use anyhow::{anyhow, Context};
+use curv::elliptic::curves::Secp256k1;
 use round_based::AsyncProtocol;
 use serde_json::{Map, Value};
 use tss::ecdsa::state_machine::keygen::Keygen;
+use tss::ecdsa::state_machine::keygen::LocalKey;
+use futures::StreamExt;
 use crate::AmqpPool;
 use crate::util::join_computation;
 
@@ -55,7 +58,7 @@ async fn join_keygen(room_id: String, participants_number: u16, required_partici
   tokio::pin!(outgoing);
 
   let keygen = Keygen::new(index, required_participants_number, participants_number)?;
-  let output = AsyncProtocol::new(keygen, incoming, outgoing)
+  let output: LocalKey<Secp256k1> = AsyncProtocol::new(keygen, incoming, outgoing)
     .run()
     .await
     .map_err(|e| anyhow!("protocol execution terminated with error: {}", e))?;
