@@ -1,0 +1,151 @@
+# Structure
+
+- Internet
+- `Backend` on NodeJS
+- RabbitMQ
+- `Manager` on Rust
+
+- Internet
+- `Relay` (former manager) on Rust
+
+## Backend
+
+Backend DB:
+- Users
+  - id: UUID
+  - email: String
+  - telegram_id: i64
+  - public_keys: {id: UUID, participant_number: u16, own_description: String}[]
+- Public keys
+  - id: UUID
+  - public_key: String (use as uuid ?)
+  - participants_number: u16
+  - required_participants_number: u16
+  - rooms: Room[]
+- Rooms
+  - id: UUID (for relay)
+  - data: String (for relay)
+  - metadata: JSON (for users and wallets)
+  - participant_numbers: u16[]
+  - public_key: String
+  - expires_at: UTC Timestamp
+  - status: { approved_participant_numbers: u16[] }
+
+Backend has html page on root for development:
+- List of users and available public keys (keys are links)
+  - Allow to create new user
+  - Allow to create new key (public shared for participants, private is unique)
+- Public key page
+  - List users with access, user can create new room
+  - Lists room with buttons to approve user
+
+#### Requests
+- /sign_up
+  - Creates user
+  - Parameters:
+    - email: String
+    - password: String
+    - password_confirmation: String
+  - Response: User
+- /login
+  - Authorizes user
+  - Parameters:
+    - email: String
+    - password: String
+    - otp: String
+  - Response: Login
+- /refresh_token
+  - Refreshes authorization token
+  - Parameters:
+    - refresh_token: String
+  - Response: Login
+- PUT /user
+  - Update user profile
+  - Parameters:
+    - email: String
+    - password: String
+    - password_confirmation: String
+- GET /user
+  - Fetch user info
+  - Response: User
+- POST /public_keys
+  - Create new public key
+  - Parameters:
+    - participants_number: u16
+    - required_participants_number: u16
+  - Response: User
+- DELETE /public_keys
+  - Destroy public key
+  - Parameters:
+    - public_key: String
+  - Response: User
+- POST /sign
+  - Creates new sign request
+  - Parameters:
+    - public_key: String
+    - data: String (for relay)
+    - metadata: JSON (for users and wallets)
+    - participant_numbers: u16[]
+  - Response: User
+
+## Manager
+
+Responses are sent when model is changed.
+
+#### Responses
+  - Keygen status:
+    - room_id: UUID
+    - participants_number: u16
+    - required_participants_number: u16
+    - status: { joined_participant_numbers: u16[] }
+    - status: Enum[Started,Finished]
+    - user
+      - user_id: UUID
+      - participant_number: Option<u16>
+      - public_key: Option<String>
+  - Sign status (sent on room creation and change, can be used to notify clients by public_key, example: get room ids by public_key):
+    - public_key: String
+    - room_id: UUID
+    - data: String (for relay)
+    - metadata: JSON (for users and wallets)
+    - participant_numbers: u16[]
+    - expires_at: UTC Timestamp
+    - status: { approved_participant_numbers: u16[] }
+    - result: Option<String>
+
+
+#### Available actions
+- keygen_start
+  - Starts keygen process
+    - Creates room and creates task with keygen request
+    - After keygen is finished, all participating users receive Keygen status with user field
+  - Parameters:
+    - user_id: UUID
+    - participants_number: u16
+    - required_participants_number: u16
+
+- keygen_join
+  - Join keygen process for user
+    - After keygen is finished, all participating users receive Keygen status with user field
+  - Parameters:
+    - user_id: UUID
+    - room_id: UUID
+    - participant_number: u16
+
+- sign_start
+  - Starts signing process
+    - Creates room and creates task with sign request
+    - After sign is finished, original user receive result
+  - Parameters:
+    - user_id: UUID
+    - public_key: String
+    - data: String (for relay)
+    - metadata: JSON (for users and wallets)
+    - participant_numbers: u16[]
+
+- sign_approve
+  - Approves sign request
+  - Parameters:
+    - room_id: UUID
+    - user_id: UUID
+    - participant_number: u16
