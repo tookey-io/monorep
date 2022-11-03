@@ -1,195 +1,86 @@
-use std::collections::hash_map::{Entry, HashMap};
-use std::sync::{
-    atomic::{AtomicU16, Ordering},
-    Arc,
-};
+mod keygen;
+mod sign;
+mod util;
 
-use futures::Stream;
-use rocket::data::ToByteUnit;
-use rocket::http::Status;
-use rocket::request::{FromRequest, Outcome, Request};
-use rocket::response::stream::{stream, Event, EventStream};
-use rocket::serde::json::Json;
-use rocket::State;
-use serde::{Deserialize, Serialize};
-use tokio::sync::{Notify, RwLock};
+use std::env;
+use std::future::Future;
+use std::str::FromStr;
+use anyhow::Context;
+use bb8::{ManageConnection, Pool};
+use bb8_lapin::lapin::{ConnectionProperties, ExchangeKind};
+use bb8_lapin::lapin::message::Delivery;
+use bb8_lapin::lapin::options::{BasicAckOptions, BasicConsumeOptions, BasicNackOptions, QueueBindOptions};
+use bb8_lapin::lapin::types::FieldTable;
+use bb8_lapin::LapinConnectionManager;
+use futures::StreamExt;
+use serde_json::Value;
+use crate::keygen::{action_keygen_join, action_keygen_start};
+use crate::sign::{sign_approve, sign_start};
 
-#[rocket::get("/rooms/<room_id>/subscribe")]
-async fn subscribe(
-    db: &State<Db>,
-    mut shutdown: rocket::Shutdown,
-    last_seen_msg: LastEventId,
-    room_id: &str,
-) -> EventStream<impl Stream<Item = Event>> {
-    let room = db.get_room_or_create_empty(room_id).await;
-    let mut subscription = room.subscribe(last_seen_msg.0);
-    EventStream::from(stream! {
-        loop {
-            let (id, msg) = tokio::select! {
-                message = subscription.next() => message,
-                _ = &mut shutdown => return,
-            };
-            yield Event::data(msg)
-                .event("new-message")
-                .id(id.to_string())
-        }
-    })
-}
-
-#[rocket::post("/rooms/<room_id>/issue_unique_idx")]
-async fn issue_idx(db: &State<Db>, room_id: &str) -> Json<IssuedUniqueIdx> {
-    let room = db.get_room_or_create_empty(room_id).await;
-    let idx = room.issue_unique_idx();
-    println!("New index is {}", idx);
-    Json::from(IssuedUniqueIdx { unique_idx: idx })
-}
-
-#[rocket::post("/rooms/<room_id>/broadcast", data = "<message>")]
-async fn broadcast(db: &State<Db>, room_id: &str, message: String) -> Status {
-    println!("Data to broadcast: {}", message);
-    let room = db.get_room_or_create_empty(room_id).await;
-    room.publish(message).await;
-    Status::Ok
-}
-
-struct Db {
-    rooms: RwLock<HashMap<String, Arc<Room>>>,
-}
-
-struct Room {
-    messages: RwLock<Vec<String>>,
-    message_appeared: Notify,
-    subscribers: AtomicU16,
-    next_idx: AtomicU16,
-}
-
-impl Db {
-    pub fn empty() -> Self {
-        Self {
-            rooms: RwLock::new(HashMap::new()),
-        }
-    }
-
-    pub async fn get_room_or_create_empty(&self, room_id: &str) -> Arc<Room> {
-        let rooms = self.rooms.read().await;
-        if let Some(room) = rooms.get(room_id) {
-            // If no one is watching this room - we need to clean it up first
-            if !room.is_abandoned() {
-                return room.clone();
-            }
-        }
-        drop(rooms);
-
-        let mut rooms = self.rooms.write().await;
-        match rooms.entry(room_id.to_owned()) {
-            Entry::Occupied(entry) if !entry.get().is_abandoned() => entry.get().clone(),
-            Entry::Occupied(entry) => {
-                let room = Arc::new(Room::empty());
-                *entry.into_mut() = room.clone();
-                room
-            }
-            Entry::Vacant(entry) => entry.insert(Arc::new(Room::empty())).clone(),
-        }
-    }
-}
-
-impl Room {
-    pub fn empty() -> Self {
-        Self {
-            messages: RwLock::new(vec![]),
-            message_appeared: Notify::new(),
-            subscribers: AtomicU16::new(0),
-            next_idx: AtomicU16::new(1),
-        }
-    }
-
-    pub async fn publish(self: &Arc<Self>, message: String) {
-        let mut messages = self.messages.write().await;
-        messages.push(message);
-        self.message_appeared.notify_waiters();
-    }
-
-    pub fn subscribe(self: Arc<Self>, last_seen_msg: Option<u16>) -> Subscription {
-        self.subscribers.fetch_add(1, Ordering::SeqCst);
-        Subscription {
-            room: self,
-            next_event: last_seen_msg.map(|i| i + 1).unwrap_or(0),
-        }
-    }
-
-    pub fn is_abandoned(&self) -> bool {
-        self.subscribers.load(Ordering::SeqCst) == 0
-    }
-
-    pub fn issue_unique_idx(&self) -> u16 {
-        self.next_idx.fetch_add(1, Ordering::Relaxed)
-    }
-}
-
-struct Subscription {
-    room: Arc<Room>,
-    next_event: u16,
-}
-
-impl Subscription {
-    pub async fn next(&mut self) -> (u16, String) {
-        loop {
-            let history = self.room.messages.read().await;
-            if let Some(msg) = history.get(usize::from(self.next_event)) {
-                let event_id = self.next_event;
-                self.next_event = event_id + 1;
-                return (event_id, msg.clone());
-            }
-            let notification = self.room.message_appeared.notified();
-            drop(history);
-            notification.await;
-        }
-    }
-}
-
-impl Drop for Subscription {
-    fn drop(&mut self) {
-        self.room.subscribers.fetch_sub(1, Ordering::SeqCst);
-    }
-}
-
-/// Represents a header Last-Event-ID
-struct LastEventId(Option<u16>);
-
-#[rocket::async_trait]
-impl<'r> FromRequest<'r> for LastEventId {
-    type Error = &'static str;
-
-    async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let header = request
-            .headers()
-            .get_one("Last-Event-ID")
-            .map(|id| id.parse::<u16>());
-        match header {
-            Some(Ok(last_seen_msg)) => Outcome::Success(LastEventId(Some(last_seen_msg))),
-            Some(Err(_parse_err)) => {
-                Outcome::Failure((Status::BadRequest, "last seen msg id is not valid"))
-            }
-            None => Outcome::Success(LastEventId(None)),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct IssuedUniqueIdx {
-    unique_idx: u16,
-}
+pub type AmqpPool = Pool<LapinConnectionManager>;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let figment = rocket::Config::figment().merge((
-        "limits",
-        rocket::data::Limits::new().limit("string", 100.megabytes()),
-    ));
-    let _ = rocket::custom(figment)
-        .mount("/", rocket::routes![subscribe, issue_idx, broadcast])
-        .manage(Db::empty())
-        .launch()
-        .await?;
-    Ok(())
+async fn main() -> anyhow::Result<()> {
+  pretty_env_logger::formatted_timed_builder()
+    .filter(
+      Some(&env!("CARGO_PKG_NAME").replace('-', "_")),
+      log::LevelFilter::from_str(&env::var("RUST_LOG").unwrap_or_else(|_| String::from("debug")))?,
+    )
+    .init();
+
+  let manager = LapinConnectionManager::new("amqp://guest:guest@127.0.0.1:5672/", ConnectionProperties::default());
+  let pool = Pool::builder()
+    .max_size(10)
+    .build(manager)
+    .await?;
+
+  let conn = manager.connect().await?;
+  let channel = conn.create_channel().await?;
+
+  let rabbit_exchange = dotenv::var("AMQP_EXCHANGE").unwrap_or(String::from("amq.topic"));
+  let rabbit_queue = dotenv::var("AMQP_QUEUE").unwrap_or(String::from("manager"));
+
+  if rabbit_exchange != "amqp.topic" {
+    channel.exchange_declare(rabbit_exchange.as_str(), ExchangeKind::Topic, exchange_options(), FieldTable::default()).await?;
+  }
+
+  channel.queue_declare(rabbit_queue.as_str(), queue_options(), FieldTable::default()).await?;
+  channel.queue_bind(rabbit_queue.as_str(), rabbit_exchange.as_str(), rabbit_queue.as_str(), QueueBindOptions::default(), FieldTable::default()).await?;
+
+  let mut consumer = channel.basic_consume(rabbit_queue.as_str(), "", BasicConsumeOptions::default(), FieldTable::default()).await?;
+
+  log::info!("Rabbit: Subscribed to {}.{}", rabbit_exchange, rabbit_queue);
+
+  // TODO: Nack requests if already handling > TASKS_LIMIT tasks (count on spawn with AtomicU32)
+  while let Some(delivery) = consumer.next().await {
+    let delivery = delivery.expect("error in consumer");
+
+    if let Err(err) = handle(delivery.data.clone(), pool.clone()).await {
+      log::error!("Failed to process action: {:?}", err)
+    }
+
+    delivery.ack(BasicAckOptions::default()).await.expect("Ack failed");
+  }
+
+  Ok(())
+}
+
+async fn handle(data: Vec<u8>, pool: AmqpPool) -> anyhow::Result<()> {
+  let data = String::from_utf8(data)?;
+  log::info!("Rabbit: Received {}", data);
+
+  let data: Value = serde_json::from_str(data.as_str())?;
+  let data = data.as_object().context("Message is not an object")?.clone();
+
+  let action = data.get("action").context("Message doesn't include action key")?.as_str().context("Action isn't a string")?;
+
+  match action {
+    "keygen_start" => { action_keygen_start(data, pool).await? }
+    "keygen_join" => { action_keygen_join(data, pool).await? }
+    "sign_start" => { sign_start(data, pool).await? }
+    "sign_approve" => { sign_approve(data, pool).await? }
+    action => log::error!("Unknown action: {}", action)
+  }
+
+  Ok(())
 }

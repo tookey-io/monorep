@@ -29,7 +29,8 @@ Backend DB:
   - participant_numbers: u16[]
   - public_key: String
   - expires_at: UTC Timestamp
-  - status: { approved_participant_numbers: u16[] }
+  - status: { finished: bool, approved_participant_numbers: u16[] }
+  - result: Option<String>
 
 Backend has html page on root for development:
 - List of users and available public keys (keys are links)
@@ -110,7 +111,7 @@ Responses are sent when model is changed.
     - metadata: JSON (for users and wallets)
     - participant_numbers: u16[]
     - expires_at: UTC Timestamp
-    - status: { approved_participant_numbers: u16[] }
+    - status: { finished: boolean, approved_participant_numbers: u16[] }
     - result: Option<String>
 
 

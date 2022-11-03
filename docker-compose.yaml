@@ -1,0 +1,41 @@
+version: '3'
+
+services:
+  rabbitmq:
+    container_name: 2k_rabbit
+    image: rabbitmq:3-management-alpine
+    ports:
+      - '127.0.0.1:5672:5672'
+      - '127.0.0.1:15672:15672'
+
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    container_name: 2k_surrealdb
+    command: start --user tookey --pass tookey file:/data/database.db
+    ports:
+      - '127.0.0.1:8100:8000'
+
+  vault:
+    image: vault:latest
+    container_name: 2k_vault
+    ports:
+      - '127.0.0.1:8200:8200'
+    environment:
+      VAULT_ADDR: 'http://0.0.0.0:8200'
+      VAULT_DEV_ROOT_TOKEN_ID: 'password'
+    cap_add:
+      - IPC_LOCK
+
+  ##
+  # Services
+  ##
+
+  backend:
+    container_name: 2k_backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - '127.0.0.1:3000:3000'
+    volumes:
+      - ./backend/src:/app/src
