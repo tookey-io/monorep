@@ -24,18 +24,19 @@ export class User {
   public id: string;
   public email: string;
   public telegram_id: string;
-  public public_keys: Map<
-    string,
-    { public_key: PublicKey; participant_number: number }
-  >;
+  public public_keys: Map<string, PublicKey>;
 }
 
 export class PublicKey {
   public id: string;
   public public_key: string;
-  public participants_number: number;
-  public required_participants_number: number;
+  public participant_index: number;
+  public participants_count: number;
+  public participants_threshold: number;
   public rooms: Room[];
+
+  public finished: boolean;
+  public participants_confirmations: number[];
 }
 
 export class Room {

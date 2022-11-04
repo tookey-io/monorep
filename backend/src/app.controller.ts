@@ -8,9 +8,14 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { AppService } from './app.service';
 import { randomUUID } from 'crypto';
 import { PublicKey, Room, User } from './user';
+import {
+  AmqpConnection,
+  RabbitPayload,
+  RabbitRPC,
+  RabbitSubscribe,
+} from '@golevelup/nestjs-rabbitmq';
 
 const users: Map<string, User> = new Map();
 
@@ -27,7 +32,7 @@ function replacer(key, value) {
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(private readonly amqp: AmqpConnection) {}
 
   @Post('/api/sign_up')
   @Header('Content-Type', 'application/json')
@@ -76,16 +81,24 @@ export class AppController {
     const key = new PublicKey();
 
     key.id = body.public_key_id || randomUUID();
-    key.public_key = randomUUID();
-    key.participants_number = body.participants_number || 3;
-    key.required_participants_number = body.required_participants_number || 2;
+    key.public_key = '';
+    key.participants_count = body.participants_count || 2;
+    key.participant_index = body.participant_index || 1;
+    key.participants_threshold = body.participants_threshold || 1;
     key.rooms = [];
 
-    user.public_keys.set(key.id, {
-      public_key: key,
-      participant_number: 0,
-    });
+    user.public_keys.set(key.id, key);
     users.set(user.id, user);
+
+    const message = {
+      action: 'keygen_join',
+      user_id: user.id,
+      room_id: key.id,
+      participant_index: key.participant_index,
+      participants_count: key.participants_count,
+      participants_threshold: key.participants_threshold,
+    };
+    this.amqp.publish('amq.topic', 'manager', message);
 
     return JSON.stringify(user, replacer);
   }
@@ -124,10 +137,36 @@ export class AppController {
 
     const key = user.public_keys.get(body.public_key_id);
 
-    key.public_key.rooms.push(room);
-    user.public_keys.set(key.public_key.id, key);
+    key.rooms.push(room);
+    user.public_keys.set(key.id, key);
     users.set(user.id, user);
 
     return JSON.stringify(user, replacer);
   }
+
+  @RabbitSubscribe({
+    routingKey: 'backend',
+    exchange: 'amq.topic',
+    queue: 'backend',
+  })
+  rabbit(@RabbitPayload() body) {
+    console.log('Rabbit message: ', body);
+
+    if (body.action === 'keygen_status') {
+      const user = users.get(body.user_id);
+      const key = user.public_keys.get(body.room_id);
+
+      if (defined(body.public_key) && body.public_key.length > 0)
+        key.public_key = body.public_key;
+
+      if (!key.finished) key.finished = body.finished;
+
+      if (body.active_indexes.length > 0)
+        key.participants_confirmations = body.active_indexes;
+    }
+  }
+}
+
+function defined(thing): boolean {
+  return typeof thing === 'undefined';
 }

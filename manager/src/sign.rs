@@ -1,10 +1,17 @@
-use serde_json::{Map, Value};
+use serde::{Deserialize, Serialize};
 use crate::AmqpPool;
 
-pub async fn sign_start(request: Map<String, Value>, pool: AmqpPool) -> anyhow::Result<()> {
-  Ok(())
+#[derive(Debug, Serialize, Deserialize)]
+struct SignParams {
+  user_id: String,
+  room_id: String,
+  public_key: String,
+  data: String,
+  participants_indexes: Vec<u16>
 }
 
-pub async fn sign_approve(request: Map<String, Value>, pool: AmqpPool) -> anyhow::Result<()> {
+pub async fn sign_approve(params: serde_json::Value, pool: AmqpPool) -> anyhow::Result<()> {
+  let params: SignParams = serde_json::from_value(params)?;
+
   Ok(())
 }

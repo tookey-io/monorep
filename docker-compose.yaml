@@ -25,17 +25,3 @@ services:
       VAULT_DEV_ROOT_TOKEN_ID: 'password'
     cap_add:
       - IPC_LOCK
-
-  ##
-  # Services
-  ##
-
-  backend:
-    container_name: 2k_backend
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - '127.0.0.1:3000:3000'
-    volumes:
-      - ./backend/src:/app/src

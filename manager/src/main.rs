@@ -7,14 +7,13 @@ use std::str::FromStr;
 use anyhow::Context;
 use bb8::{ManageConnection, Pool};
 use bb8_lapin::lapin::{ConnectionProperties, ExchangeKind};
-use bb8_lapin::lapin::message::Delivery;
-use bb8_lapin::lapin::options::{BasicAckOptions, BasicConsumeOptions, BasicNackOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
+use bb8_lapin::lapin::options::{BasicAckOptions, BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
 use bb8_lapin::lapin::types::FieldTable;
 use bb8_lapin::LapinConnectionManager;
 use futures::StreamExt;
 use serde_json::Value;
-use crate::keygen::{action_keygen_join, action_keygen_start};
-use crate::sign::{sign_approve, sign_start};
+use crate::keygen::{action_keygen_join};
+use crate::sign::{sign_approve};
 
 pub type AmqpPool = Pool<LapinConnectionManager>;
 
@@ -27,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
     )
     .init();
 
-  let manager = LapinConnectionManager::new("amqp://guest:guest@127.0.0.1:5672/", ConnectionProperties::default());
+  let manager = LapinConnectionManager::new("amqp://guest:guest@127.0.0.1:5672//", ConnectionProperties::default());
   let conn = manager.connect().await?;
   let pool = Pool::builder()
     .max_size(10)
@@ -39,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
   let rabbit_exchange = env::var("AMQP_EXCHANGE").unwrap_or(String::from("amq.topic"));
   let rabbit_queue = env::var("AMQP_QUEUE").unwrap_or(String::from("manager"));
 
-  if rabbit_exchange != "amqp.topic" {
+  if rabbit_exchange != "amq.topic" {
     channel.exchange_declare(rabbit_exchange.as_str(), ExchangeKind::Topic, exchange_options(), FieldTable::default()).await?;
   }
 
@@ -69,17 +68,22 @@ async fn handle(data: Vec<u8>, pool: AmqpPool) -> anyhow::Result<()> {
   log::info!("Rabbit: Received {}", data);
 
   let data: Value = serde_json::from_str(data.as_str())?;
-  let data = data.as_object().context("Message is not an object")?.clone();
+  let action = data.as_object().context("Message is not an object")?.get("action").context("Message doesn't include action key")?.as_str().context("Action isn't a string")?.to_owned();
 
-  let action = data.get("action").context("Message doesn't include action key")?.as_str().context("Action isn't a string")?;
+  tokio::spawn(async move {
+    let result = match action.as_str() {
+      "keygen_join" => { action_keygen_join(data.clone(), pool).await }
+      "sign_approve" => { sign_approve(data.clone(), pool).await }
+      action => {
+        log::error!("Unknown action: {}", action);
+        Ok(())
+      }
+    };
 
-  match action {
-    "keygen_start" => { action_keygen_start(data, pool).await? }
-    "keygen_join" => { action_keygen_join(data, pool).await? }
-    "sign_start" => { sign_start(data, pool).await? }
-    "sign_approve" => { sign_approve(data, pool).await? }
-    action => log::error!("Unknown action: {}", action)
-  }
+    if let Err(err) = result {
+      log::error!("Failed to execute action {}: {:?} (data: {})", action, err, data);
+    }
+  });
 
   Ok(())
 }
@@ -94,7 +98,7 @@ fn queue_options() -> QueueDeclareOptions {
 
       passive: false,
       exclusive: false,
-      nowait: false
+      nowait: false,
     }
   } else {
     QueueDeclareOptions {
@@ -103,7 +107,7 @@ fn queue_options() -> QueueDeclareOptions {
 
       passive: false,
       exclusive: false,
-      nowait: false
+      nowait: false,
     }
   }
 }
@@ -114,6 +118,6 @@ fn exchange_options() -> ExchangeDeclareOptions {
     durable: true,
     auto_delete: false,
     internal: false,
-    nowait: false
+    nowait: false,
   }
 }

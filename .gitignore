@@ -2,3 +2,6 @@
 /target
 
 local-share*.json
+/key*.json
+
+.cargo

@@ -30,7 +30,8 @@ async fn main() -> Result<()> {
     let args: Cli = Cli::from_args();
     let mut output_file = tokio::fs::OpenOptions::new()
         .write(true)
-        .create_new(true)
+        .create(true)
+        .truncate(true)
         .open(args.output)
         .await
         .context("cannot create output file")?;
@@ -38,18 +39,16 @@ async fn main() -> Result<()> {
     let (_i, incoming, outgoing) = join_computation(args.address, &args.room)
         .await
         .context("join computation")?;
-    println!("Joined");
+
     let incoming = incoming.fuse();
     tokio::pin!(incoming);
     tokio::pin!(outgoing);
-    println!("Pinned");
 
     let keygen = Keygen::new(args.index, args.threshold, args.number_of_parties)?;
     let output = AsyncProtocol::new(keygen, incoming, outgoing)
         .run()
         .await
         .map_err(|e| anyhow!("protocol execution terminated with error: {}", e))?;
-    println!("Got output");
 
     let output = serde_json::to_vec_pretty(&output).context("serialize output")?;
     tokio::io::copy(&mut output.as_slice(), &mut output_file)
