@@ -1,30 +1,29 @@
-use std::env;
-use std::ops::Deref;
-use anyhow::{anyhow, Context};
-use bb8_lapin::lapin::BasicProperties;
+use crate::secrets::store_key;
+use crate::util::join_computation;
+use crate::AmqpPool;
+use anyhow::{anyhow, Context, Error};
 use bb8_lapin::lapin::options::BasicPublishOptions;
+use bb8_lapin::lapin::BasicProperties;
 use curv::elliptic::curves::Secp256k1;
-use round_based::{AsyncProtocol, Msg};
-use tss::ecdsa::state_machine::keygen::{Keygen, ProtocolMessage};
-use tss::ecdsa::state_machine::keygen::LocalKey;
-use futures::{SinkExt, StreamExt};
 use futures::channel::mpsc;
+use futures::{SinkExt, StreamExt};
+use hex::ToHex;
+use round_based::{AsyncProtocol, Msg};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::env;
+use std::ops::Deref;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use crate::AmqpPool;
-use crate::util::join_computation;
-use hex::ToHex;
-
-pub fn relay_address() -> surf::Url {
-  env::var("RELAY_ADDRESS").unwrap_or_else(|_| "http://localhost:8000".to_owned()).parse().unwrap()
-}
+use tss::ecdsa::state_machine::keygen::LocalKey;
+use tss::ecdsa::state_machine::keygen::{Keygen, ProtocolMessage};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct KeygenParams {
   user_id: String,
+  key_id: String,
   room_id: String,
+  relay_address: String,
   participant_index: u16,
   participants_count: u16,
   participants_threshold: u16,
@@ -33,7 +32,7 @@ struct KeygenParams {
 pub async fn action_keygen_join(params: serde_json::Value, pool: AmqpPool) -> anyhow::Result<()> {
   let params: KeygenParams = serde_json::from_value(params)?;
 
-  let (_i, incoming, outgoing) = join_computation(relay_address(), params.room_id.as_str())
+  let (_i, incoming, outgoing) = join_computation(params.relay_address.parse()?, params.room_id.as_str())
     .await
     .context("join computation")?;
 
@@ -41,7 +40,8 @@ pub async fn action_keygen_join(params: serde_json::Value, pool: AmqpPool) -> an
   let (mut sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<u16>();
   let incoming = incoming.map(move |item: anyhow::Result<Msg<ProtocolMessage>>| {
     if let Ok(i) = &item {
-      sender.send(i.sender).unwrap()
+      // Ignore errors
+      let _ = sender.send(i.sender);
     }
 
     item
@@ -57,8 +57,18 @@ pub async fn action_keygen_join(params: serde_json::Value, pool: AmqpPool) -> an
       if !active.contains(&v) {
         active.push(v);
 
-        let result = send_keygen_status(pool_clone.clone(), params_clone.room_id.clone(), params_clone.user_id.clone(), active.len() == params_clone.participants_count as usize, active.clone(), "".to_owned()).await;
-        if let Err(err) = result { log::error!("Failed to send keygen status: {:?}", err) }
+        let result = send_keygen_status(
+          pool_clone.clone(),
+          params_clone.user_id.clone(),
+          params_clone.room_id.clone(),
+          "started",
+          active.clone(),
+          None,
+        )
+        .await;
+        if let Err(err) = result {
+          log::error!("Failed to send keygen status: {:?}", err)
+        }
       }
     }
   });
@@ -68,33 +78,68 @@ pub async fn action_keygen_join(params: serde_json::Value, pool: AmqpPool) -> an
   tokio::pin!(incoming);
   tokio::pin!(outgoing);
 
-  let keygen = Keygen::new(params.participant_index, params.participants_threshold, params.participants_count)?;
-  let output: LocalKey<Secp256k1> = AsyncProtocol::new(keygen, incoming, outgoing)
+  let keygen = Keygen::new(
+    params.participant_index,
+    params.participants_threshold,
+    params.participants_count,
+  )?;
+
+  let output: LocalKey<Secp256k1> = match AsyncProtocol::new(keygen, incoming, outgoing)
     .run()
     .await
-    .map_err(|e| anyhow!("protocol execution terminated with error: {}", e))?;
+    .map_err(|e| anyhow!("protocol execution terminated with error: {}", e))
+  {
+    Ok(output) => output,
+    Err(err) => {
+      send_keygen_status(pool.clone(), params.user_id, params.room_id, "error", Vec::new(), None).await?;
+      return Err(err);
+    }
+  };
 
   let public_key: String = output.public_key().to_bytes(true).deref().encode_hex();
-  let output = serde_json::to_string(&output)?;
-  log::debug!("Generated key for {}, public key: {}", params.user_id, public_key);
 
-  // TODO: Write key to Vault
-  send_keygen_status(pool.clone(), params.room_id, params.user_id, true, Vec::new(), public_key).await?;
+  store_key(&params.user_id, &params.key_id, &output).await?;
+
+  send_keygen_status(
+    pool.clone(),
+    params.user_id,
+    params.room_id,
+    "finished",
+    (1..=params.participants_count).into_iter().collect(),
+    Some(public_key),
+  )
+  .await?;
 
   Ok(())
 }
 
-async fn send_keygen_status(pool: AmqpPool, room_id: String, user_id: String, finished: bool, active_indexes: Vec<u16>, public_key: String) -> anyhow::Result<()> {
+async fn send_keygen_status(
+  pool: AmqpPool,
+  user_id: String,
+  room_id: String,
+  status: &'static str,
+  active_indexes: Vec<u16>,
+  public_key: Option<String>,
+) -> anyhow::Result<()> {
   let conn = pool.get().await?;
 
   let channel = conn.create_channel().await?;
 
-  let msg = json!({ "action": "keygen_status", "room_id": room_id, "user_id": user_id, "finished": finished, "active_indexes": active_indexes, "public_key": public_key });
+  let msg = json!({ "action": "keygen_status", "user_id": user_id, "room_id": room_id, "status": status, "active_indexes": active_indexes, "public_key": public_key });
   let msg = serde_json::to_string(&msg)?;
 
-  // log::debug!("Rabbit: Sending to backend {}", msg);
+  log::trace!("Rabbit: Sending to backend {}", msg);
 
-  channel.basic_publish("amq.topic", "backend", BasicPublishOptions::default(), msg.as_bytes(), BasicProperties::default()).await?;
+  // TODO: Replace with fanout routing
+  channel
+    .basic_publish(
+      "amq.topic",
+      "backend",
+      BasicPublishOptions::default(),
+      msg.as_bytes(),
+      BasicProperties::default(),
+    )
+    .await?;
 
   Ok(())
 }

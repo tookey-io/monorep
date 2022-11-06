@@ -22,6 +22,9 @@ pretty_env_logger = "^0.4.0"
 bb8 = "^0.8.0"
 bb8-lapin = "^0.4.0"
 
+# Hashicorp Vault
+vaultrs = "=0.6.0"
+
 # Ceremony
 async-sse = "5"
 curv-kzen = { version = "0.9", default-features = false }

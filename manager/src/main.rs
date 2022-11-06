@@ -1,19 +1,24 @@
 mod keygen;
+mod secrets;
 mod sign;
 mod util;
 
-use std::env;
-use std::str::FromStr;
+use crate::keygen::action_keygen_join;
+use crate::secrets::fetch_key;
+use crate::sign::sign_approve;
 use anyhow::Context;
 use bb8::{ManageConnection, Pool};
-use bb8_lapin::lapin::{ConnectionProperties, ExchangeKind};
-use bb8_lapin::lapin::options::{BasicAckOptions, BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions};
+use bb8_lapin::lapin::options::{
+  BasicAckOptions, BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
+};
 use bb8_lapin::lapin::types::FieldTable;
+use bb8_lapin::lapin::{ConnectionProperties, ExchangeKind};
 use bb8_lapin::LapinConnectionManager;
 use futures::StreamExt;
 use serde_json::Value;
-use crate::keygen::{action_keygen_join};
-use crate::sign::{sign_approve};
+use std::io::Write;
+use std::str::FromStr;
+use std::{env, fs};
 
 pub type AmqpPool = Pool<LapinConnectionManager>;
 
@@ -28,10 +33,7 @@ async fn main() -> anyhow::Result<()> {
 
   let manager = LapinConnectionManager::new("amqp://guest:guest@127.0.0.1:5672//", ConnectionProperties::default());
   let conn = manager.connect().await?;
-  let pool = Pool::builder()
-    .max_size(10)
-    .build(manager)
-    .await?;
+  let pool = Pool::builder().max_size(10).build(manager).await?;
 
   let channel = conn.create_channel().await?;
 
@@ -39,13 +41,37 @@ async fn main() -> anyhow::Result<()> {
   let rabbit_queue = env::var("AMQP_QUEUE").unwrap_or(String::from("manager"));
 
   if rabbit_exchange != "amq.topic" {
-    channel.exchange_declare(rabbit_exchange.as_str(), ExchangeKind::Topic, exchange_options(), FieldTable::default()).await?;
+    channel
+      .exchange_declare(
+        rabbit_exchange.as_str(),
+        ExchangeKind::Topic,
+        exchange_options(),
+        FieldTable::default(),
+      )
+      .await?;
   }
 
-  channel.queue_declare(rabbit_queue.as_str(), queue_options(), FieldTable::default()).await?;
-  channel.queue_bind(rabbit_queue.as_str(), rabbit_exchange.as_str(), rabbit_queue.as_str(), QueueBindOptions::default(), FieldTable::default()).await?;
+  channel
+    .queue_declare(rabbit_queue.as_str(), queue_options(), FieldTable::default())
+    .await?;
+  channel
+    .queue_bind(
+      rabbit_queue.as_str(),
+      rabbit_exchange.as_str(),
+      rabbit_queue.as_str(),
+      QueueBindOptions::default(),
+      FieldTable::default(),
+    )
+    .await?;
 
-  let mut consumer = channel.basic_consume(rabbit_queue.as_str(), "", BasicConsumeOptions::default(), FieldTable::default()).await?;
+  let mut consumer = channel
+    .basic_consume(
+      rabbit_queue.as_str(),
+      "",
+      BasicConsumeOptions::default(),
+      FieldTable::default(),
+    )
+    .await?;
 
   log::info!("Rabbit: Subscribed to {}.{}", rabbit_exchange, rabbit_queue);
 
@@ -65,15 +91,22 @@ async fn main() -> anyhow::Result<()> {
 
 async fn handle(data: Vec<u8>, pool: AmqpPool) -> anyhow::Result<()> {
   let data = String::from_utf8(data)?;
-  log::info!("Rabbit: Received {}", data);
+  log::trace!("Rabbit: Received {}", data);
 
   let data: Value = serde_json::from_str(data.as_str())?;
-  let action = data.as_object().context("Message is not an object")?.get("action").context("Message doesn't include action key")?.as_str().context("Action isn't a string")?.to_owned();
+  let action = data
+    .as_object()
+    .context("Message is not an object")?
+    .get("action")
+    .context("Message doesn't include action key")?
+    .as_str()
+    .context("Action isn't a string")?
+    .to_owned();
 
   tokio::spawn(async move {
     let result = match action.as_str() {
-      "keygen_join" => { action_keygen_join(data.clone(), pool).await }
-      "sign_approve" => { sign_approve(data.clone(), pool).await }
+      "keygen_join" => action_keygen_join(data.clone(), pool).await,
+      "sign_approve" => sign_approve(data.clone(), pool).await,
       action => {
         log::error!("Unknown action: {}", action);
         Ok(())

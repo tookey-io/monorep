@@ -13,11 +13,28 @@ import { PublicKey, Room, User } from './user';
 import {
   AmqpConnection,
   RabbitPayload,
-  RabbitRPC,
   RabbitSubscribe,
 } from '@golevelup/nestjs-rabbitmq';
 
 const users: Map<string, User> = new Map();
+const keys: Map<string, PublicKey> = new Map();
+
+{
+  const key = new PublicKey();
+
+  key.id = '4ed0357b-8fa9-4416-be2f-174575b9c900';
+  key.room_id = '4ed0357b-8fa9-4416-be2f-174575b9c900';
+  key.public_key =
+    '03dece7916fbed8c71175064e034b4e010a590f4ff745a204e03ca4fb32ead0af3';
+  key.participants_count = 3;
+  key.participant_index = 1;
+  key.participants_threshold = 2;
+  key.participants_confirmations = [1, 2, 3];
+  key.status = 'finished';
+  key.rooms = new Map();
+
+  keys.set(key.id, key);
+}
 
 function replacer(key, value) {
   if (value instanceof Map) {
@@ -41,7 +58,7 @@ export class AppController {
 
     user.id = body.user_id || randomUUID();
     user.email = body.email;
-    user.public_keys = new Map();
+    user.public_keys = [];
 
     users.set(user.id, user);
 
@@ -52,6 +69,12 @@ export class AppController {
   @Header('Content-Type', 'application/json')
   getUser(@Query() params): string {
     return JSON.stringify(users.get(params.id), replacer);
+  }
+
+  @Get('/api/key')
+  @Header('Content-Type', 'application/json')
+  getKey(@Query() params): string {
+    return JSON.stringify(keys.get(params.id), replacer);
   }
 
   @Put('/api/user')
@@ -81,19 +104,25 @@ export class AppController {
     const key = new PublicKey();
 
     key.id = body.public_key_id || randomUUID();
-    key.public_key = '';
+    key.room_id = body.public_key_id || randomUUID();
+    key.public_key = null;
     key.participants_count = body.participants_count || 2;
     key.participant_index = body.participant_index || 1;
     key.participants_threshold = body.participants_threshold || 1;
-    key.rooms = [];
+    key.participants_confirmations = [];
+    key.status = 'created';
+    key.rooms = new Map();
 
-    user.public_keys.set(key.id, key);
+    keys.set(key.id, key);
+    user.public_keys.push(key.id);
     users.set(user.id, user);
 
     const message = {
       action: 'keygen_join',
       user_id: user.id,
-      room_id: key.id,
+      room_id: key.room_id,
+      key_id: key.id,
+      relay_address: 'http://localhost:8000',
       participant_index: key.participant_index,
       participants_count: key.participants_count,
       participants_threshold: key.participants_threshold,
@@ -112,7 +141,7 @@ export class AppController {
       return 'Not found';
     }
 
-    user.public_keys.delete(body.public_key_id);
+    keys.delete(body.public_key_id);
     users.set(user.id, user);
 
     return JSON.stringify(user, replacer);
@@ -121,27 +150,39 @@ export class AppController {
   @Post('/api/sign')
   @Header('Content-Type', 'application/json')
   sign(@Body() body): string {
-    const user = users.get(body.user_id);
-
-    if (typeof user == 'undefined') {
-      return 'Not found';
-    }
-
     const room = new Room();
-    room.id = randomUUID();
+    room.id = body.room_id || randomUUID();
     room.data = body.data || '';
     room.metadata = body.metadata || { example: 'data' };
-    room.participant_numbers = [0, 1];
+    room.participant_indexes = body.participant_indexes;
+    room.participants_confirmations = [];
     room.expires_at = 0;
-    room.status = { finished: false, approved_participants_numbers: [0] };
+    room.status = 'created';
 
-    const key = user.public_keys.get(body.public_key_id);
+    const key = keys.get(body.public_key_id);
 
-    key.rooms.push(room);
-    user.public_keys.set(key.id, key);
-    users.set(user.id, user);
+    key.rooms.set(room.id, room);
 
-    return JSON.stringify(user, replacer);
+    const message = {
+      action: 'sign_approve',
+      user_id: body.user_id,
+      room_id: room.id,
+      key_id: key.id,
+      relay_address: 'http://localhost:8000',
+      data: room.data,
+      participants_indexes: room.participant_indexes,
+    };
+    this.amqp.publish('amq.topic', 'manager', message);
+
+    //
+    // user_id: String,
+    //   key_id: String,
+    //   room_id: String,
+    //   relay_address: String,
+    //   data: String,
+    //   participants_indexes: Vec<u16>,
+
+    return JSON.stringify(key, replacer);
   }
 
   @RabbitSubscribe({
@@ -153,20 +194,32 @@ export class AppController {
     console.log('Rabbit message: ', body);
 
     if (body.action === 'keygen_status') {
-      const user = users.get(body.user_id);
-      const key = user.public_keys.get(body.room_id);
+      const key = [...keys.values()].find(
+        (value) => value.room_id === body.room_id,
+      );
 
-      if (defined(body.public_key) && body.public_key.length > 0)
+      key.status = body.status;
+
+      if (key.status === 'finished') {
         key.public_key = body.public_key;
-
-      if (!key.finished) key.finished = body.finished;
-
-      if (body.active_indexes.length > 0)
         key.participants_confirmations = body.active_indexes;
+      } else if (key.status === 'started') {
+        key.participants_confirmations = body.active_indexes;
+      }
+    } else if (body.action === 'sign_status') {
+      const key = [...keys.values()].find((value) =>
+        value.rooms.has(body.room_id),
+      );
+      const room = key.rooms.get(body.room_id);
+
+      room.status = body.status;
+
+      if (room.status === 'finished') {
+        room.result = body.result;
+        room.participants_confirmations = body.active_indexes;
+      } else if (key.status === 'started') {
+        room.participants_confirmations = body.active_indexes;
+      }
     }
   }
-}
-
-function defined(thing): boolean {
-  return typeof thing === 'undefined';
 }

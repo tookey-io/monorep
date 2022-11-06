@@ -24,18 +24,19 @@ export class User {
   public id: string;
   public email: string;
   public telegram_id: string;
-  public public_keys: Map<string, PublicKey>;
+  public public_keys: string[];
 }
 
 export class PublicKey {
   public id: string;
+  public room_id: string;
   public public_key: string;
   public participant_index: number;
   public participants_count: number;
   public participants_threshold: number;
-  public rooms: Room[];
+  public rooms: Map<string, Room>;
 
-  public finished: boolean;
+  public status: 'created' | 'started' | 'finished' | 'error';
   public participants_confirmations: number[];
 }
 
@@ -43,8 +44,10 @@ export class Room {
   public id: string;
   public data: string;
   public metadata: any;
-  public participant_numbers: number[];
+  public participant_indexes: number[];
   public expires_at: number;
-  public status: { finished: boolean; approved_participants_numbers: number[] };
   public result: string;
+
+  public status: 'created' | 'started' | 'finished' | 'error';
+  public participants_confirmations: number[];
 }
