@@ -1,25 +1,25 @@
-use crate::util::join_computation;
-use crate::{fetch_key, AmqpPool};
-use anyhow::{anyhow, Context};
-use bb8_lapin::lapin::options::BasicPublishOptions;
-use bb8_lapin::lapin::BasicProperties;
+use std::str::FromStr;
+use std::time::Duration;
+
+use anyhow::Context;
 use curv::arithmetic::Converter;
-use curv::elliptic::curves::Secp256k1;
 use curv::BigInt;
 use ethereum_types::H256;
 use futures::SinkExt;
 use futures::StreamExt;
-use round_based::{AsyncProtocol, Msg};
+use round_based::Msg;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::ops::Deref;
-use std::path::PathBuf;
-use std::str::FromStr;
-use structopt::StructOpt;
-use tss::ecdsa::state_machine::keygen::Keygen;
-use tss::ecdsa::state_machine::keygen::LocalKey;
+use tokio::time::sleep;
+
 use tss::ecdsa::state_machine::sign::{OfflineProtocolMessage, PartialSignature};
 use tss_ceremonies::ecdsa;
+
+use crate::amqp::{amqp_send_notification, AmqpPool};
+use crate::config::Config;
+use crate::keygen::TaskStatus;
+use crate::secrets::fetch_key;
+use crate::util::join_computation;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct SignParams {
@@ -29,6 +29,9 @@ struct SignParams {
   relay_address: String,
   data: String,
   participants_indexes: Vec<u16>,
+
+  #[serde(default = "Config::default_timeout_seconds")]
+  timeout_seconds: u64,
 }
 
 pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
@@ -38,8 +41,22 @@ pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
     .await
     .context("join computation")?;
 
+  let key = fetch_key(&params.user_id, &params.key_id).await?;
+
+  // Notify about sign start if first user
+  if key.i == 1 {
+    send_sign_status(
+      pool.clone(),
+      params.room_id.clone(),
+      TaskStatus::Created,
+      Some(vec![key.i]),
+      None,
+    )
+    .await?;
+  }
+
   // Collect senders and send progress statuses
-  let (mut sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<u16>();
+  let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<u16>();
   let incoming = incoming.map(move |item: anyhow::Result<Msg<Value>>| {
     if let Ok(i) = &item {
       // Ignore errors
@@ -62,8 +79,8 @@ pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
         let result = send_sign_status(
           pool_clone.clone(),
           params_clone.room_id.clone(),
-          "started",
-          active.clone(),
+          TaskStatus::Started,
+          Some(active.clone()),
           None,
         )
         .await;
@@ -100,10 +117,10 @@ pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
   let outgoing_sender = futures::sink::unfold(outgoing, |mut outgoing, msg| async move {
     let packet = match msg {
       ecdsa::Messages::OfflineStage(msg) => {
-        msg.map_body(|body| serde_json::to_value(body).context("packet serialization").unwrap())
+        msg.map_body(|body| serde_json::to_value(body).unwrap_or_else(|_| Value::Null))
       }
       ecdsa::Messages::PartialSignature(msg) => {
-        msg.map_body(|body| serde_json::to_value(body).context("packet serialization").unwrap())
+        msg.map_body(|body| serde_json::to_value(body).unwrap_or_else(|_| Value::Null))
       }
     };
 
@@ -112,22 +129,26 @@ pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
     Ok::<_, anyhow::Error>(outgoing)
   });
 
-  let key = fetch_key(&params.user_id, &params.key_id).await?;
   let hash = BigInt::from_bytes(H256::from_str(params.data.as_str()).context("hash read")?.as_bytes());
-  let signature = match tss_ceremonies::ecdsa::sign(
+
+  let signature_future = tss_ceremonies::ecdsa::sign(
     outgoing_sender,
     incoming,
     key,
     params.participants_indexes.clone(),
     hash,
-  )
-  .await
-  {
-    Ok(sign) => sign,
-    Err(err) => {
-      send_sign_status(pool.clone(), params.room_id, "error", Vec::new(), None).await?;
-
-      return Err(err);
+  );
+  let signature = match tokio::time::timeout(Duration::from_secs(params.timeout_seconds), signature_future).await {
+    Ok(result) => match result {
+      Ok(sign) => sign,
+      Err(err) => {
+        send_sign_status(pool.clone(), params.room_id, TaskStatus::Error, None, None).await?;
+        return Err(err);
+      }
+    },
+    Err(_) => {
+      send_sign_status(pool.clone(), params.room_id, TaskStatus::Timeout, None, None).await?;
+      return Err(anyhow::anyhow!("Timed out"));
     }
   };
 
@@ -136,11 +157,14 @@ pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
   send_sign_status(
     pool.clone(),
     params.room_id,
-    "finished",
-    params.participants_indexes,
+    TaskStatus::Finished,
+    Some(params.participants_indexes),
     Some(signature),
   )
   .await?;
+
+  // Wait for outgoing messages to be flushed
+  sleep(Duration::from_millis(1000)).await;
 
   Ok(())
 }
@@ -148,29 +172,20 @@ pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
 async fn send_sign_status(
   pool: AmqpPool,
   room_id: String,
-  status: &'static str,
-  active_indexes: Vec<u16>,
+  status: TaskStatus,
+  active_indexes: Option<Vec<u16>>,
   result: Option<String>,
 ) -> anyhow::Result<()> {
-  let conn = pool.get().await?;
-
-  let channel = conn.create_channel().await?;
-
-  let msg = json!({ "action": "sign_status", "room_id": room_id, "status": status, "active_indexes": active_indexes, "result": result });
+  let msg = json!({
+    "action": "sign_status",
+    "room_id": room_id,
+    "status": status.to_string(),
+    "active_indexes": active_indexes,
+    "result": result
+  });
   let msg = serde_json::to_string(&msg)?;
 
-  log::trace!("Rabbit: Sending to backend {}", msg);
-
-  // TODO: Replace with fanout routing
-  channel
-    .basic_publish(
-      "amq.topic",
-      "backend",
-      BasicPublishOptions::default(),
-      msg.as_bytes(),
-      BasicProperties::default(),
-    )
-    .await?;
+  amqp_send_notification(pool, msg).await?;
 
   Ok(())
 }

@@ -125,7 +125,7 @@ export class AppController {
       relay_address: 'http://localhost:8000',
       participant_index: key.participant_index,
       participants_count: key.participants_count,
-      participants_threshold: key.participants_threshold,
+      participants_threshold: key.participants_threshold - 1,
     };
     this.amqp.publish('amq.topic', 'manager', message);
 
@@ -173,14 +173,6 @@ export class AppController {
       participants_indexes: room.participant_indexes,
     };
     this.amqp.publish('amq.topic', 'manager', message);
-
-    //
-    // user_id: String,
-    //   key_id: String,
-    //   room_id: String,
-    //   relay_address: String,
-    //   data: String,
-    //   participants_indexes: Vec<u16>,
 
     return JSON.stringify(key, replacer);
   }

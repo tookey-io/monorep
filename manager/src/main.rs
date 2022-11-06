@@ -1,81 +1,36 @@
+use std::env;
+use std::str::FromStr;
+
+use anyhow::Context;
+use bb8_lapin::lapin::options::BasicAckOptions;
+use futures::StreamExt;
+use serde_json::Value;
+
+use crate::amqp::{amqp_init, amqp_subscribe, AmqpPool};
+use crate::config::Config;
+use crate::keygen::action_keygen_join;
+use crate::sign::sign_approve;
+
+mod amqp;
+mod config;
 mod keygen;
 mod secrets;
 mod sign;
 mod util;
-
-use crate::keygen::action_keygen_join;
-use crate::secrets::fetch_key;
-use crate::sign::sign_approve;
-use anyhow::Context;
-use bb8::{ManageConnection, Pool};
-use bb8_lapin::lapin::options::{
-  BasicAckOptions, BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
-};
-use bb8_lapin::lapin::types::FieldTable;
-use bb8_lapin::lapin::{ConnectionProperties, ExchangeKind};
-use bb8_lapin::LapinConnectionManager;
-use futures::StreamExt;
-use serde_json::Value;
-use std::io::Write;
-use std::str::FromStr;
-use std::{env, fs};
-
-pub type AmqpPool = Pool<LapinConnectionManager>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
   pretty_env_logger::formatted_timed_builder()
     .filter(
       Some(&env!("CARGO_PKG_NAME").replace('-', "_")),
-      log::LevelFilter::from_str(&env::var("RUST_LOG").unwrap_or_else(|_| String::from("debug")))?,
+      log::LevelFilter::from_str(&env::var("RUST_LOG").unwrap_or_else(|_| String::from("info")))?,
     )
     .init();
 
-  let manager = LapinConnectionManager::new("amqp://guest:guest@127.0.0.1:5672//", ConnectionProperties::default());
-  let conn = manager.connect().await?;
-  let pool = Pool::builder().max_size(10).build(manager).await?;
+  let pool = amqp_init().await?;
+  let mut consumer = amqp_subscribe().await?;
 
-  let channel = conn.create_channel().await?;
-
-  let rabbit_exchange = env::var("AMQP_EXCHANGE").unwrap_or(String::from("amq.topic"));
-  let rabbit_queue = env::var("AMQP_QUEUE").unwrap_or(String::from("manager"));
-
-  if rabbit_exchange != "amq.topic" {
-    channel
-      .exchange_declare(
-        rabbit_exchange.as_str(),
-        ExchangeKind::Topic,
-        exchange_options(),
-        FieldTable::default(),
-      )
-      .await?;
-  }
-
-  channel
-    .queue_declare(rabbit_queue.as_str(), queue_options(), FieldTable::default())
-    .await?;
-  channel
-    .queue_bind(
-      rabbit_queue.as_str(),
-      rabbit_exchange.as_str(),
-      rabbit_queue.as_str(),
-      QueueBindOptions::default(),
-      FieldTable::default(),
-    )
-    .await?;
-
-  let mut consumer = channel
-    .basic_consume(
-      rabbit_queue.as_str(),
-      "",
-      BasicConsumeOptions::default(),
-      FieldTable::default(),
-    )
-    .await?;
-
-  log::info!("Rabbit: Subscribed to {}.{}", rabbit_exchange, rabbit_queue);
-
-  // TODO: Nack requests if already handling > TASKS_LIMIT tasks (count on spawn with AtomicU32)
+  // TODO: Nack requests if already handling > TASKS_LIMIT tasks (increment on spawn with AtomicU32, decrement on task finish)
   while let Some(delivery) = consumer.next().await {
     let delivery = delivery.expect("error in consumer");
 
@@ -91,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn handle(data: Vec<u8>, pool: AmqpPool) -> anyhow::Result<()> {
   let data = String::from_utf8(data)?;
-  log::trace!("Rabbit: Received {}", data);
+  log::trace!("AMQP: Received {}", data);
 
   let data: Value = serde_json::from_str(data.as_str())?;
   let action = data
@@ -119,38 +74,4 @@ async fn handle(data: Vec<u8>, pool: AmqpPool) -> anyhow::Result<()> {
   });
 
   Ok(())
-}
-
-fn queue_options() -> QueueDeclareOptions {
-  let env = env::var("APP_ENV").unwrap_or(String::from("production"));
-
-  if env == "test" {
-    QueueDeclareOptions {
-      durable: false,
-      auto_delete: true,
-
-      passive: false,
-      exclusive: false,
-      nowait: false,
-    }
-  } else {
-    QueueDeclareOptions {
-      durable: true,
-      auto_delete: false,
-
-      passive: false,
-      exclusive: false,
-      nowait: false,
-    }
-  }
-}
-
-fn exchange_options() -> ExchangeDeclareOptions {
-  ExchangeDeclareOptions {
-    passive: false,
-    durable: true,
-    auto_delete: false,
-    internal: false,
-    nowait: false,
-  }
 }

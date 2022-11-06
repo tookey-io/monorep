@@ -1,7 +1,9 @@
 use curv::elliptic::curves::Secp256k1;
-use tss::ecdsa::state_machine::keygen::LocalKey;
 use vaultrs::client::{VaultClient, VaultClientSettingsBuilder};
 use vaultrs::kv2;
+
+use crate::Config;
+use tss::ecdsa::state_machine::keygen::LocalKey;
 
 pub async fn store_key(user_id: &str, key_id: &str, key: &LocalKey<Secp256k1>) -> anyhow::Result<()> {
   let client = build_client()?;
@@ -20,8 +22,8 @@ pub async fn fetch_key(user_id: &str, key_id: &str) -> anyhow::Result<LocalKey<S
 fn build_client() -> anyhow::Result<VaultClient> {
   let client = VaultClient::new(
     VaultClientSettingsBuilder::default()
-      .address("http://127.0.0.1:8200")
-      .token("password")
+      .address(Config::vault_address())
+      .token(Config::vault_token())
       .build()?,
   )?;
 
