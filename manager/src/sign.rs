@@ -26,9 +26,11 @@ struct SignParams {
   user_id: String,
   key_id: String,
   room_id: String,
-  relay_address: String,
   data: String,
   participants_indexes: Vec<u16>,
+
+  #[serde(default = "Config::relay_address")]
+  relay_address: String,
 
   #[serde(default = "Config::default_timeout_seconds")]
   timeout_seconds: u64,

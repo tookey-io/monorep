@@ -1,0 +1,237 @@
+{
+	"info": {
+		"_postman_id": "66ba1b67-ece3-46f2-bc16-512d1e58b9b1",
+		"name": "2k Backend",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "3821318"
+	},
+	"item": [
+		{
+			"name": "Sign up",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"email\": \"test@admin.tech\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base}}/api/sign_up",
+					"host": [
+						"{{base}}"
+					],
+					"path": [
+						"api",
+						"sign_up"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Sign",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"public_key_id\": \"{{public_key_id}}\",\n    \"room_id\": \"{{sign_room_id}}\",\n    \"data\": \"0xbd621a5652a421f0b853d2a56609bfd26ae965709070708a34f7607f1ce97a60\",\n    \"participant_indexes\": [1,2]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base}}/api/sign",
+					"host": [
+						"{{base}}"
+					],
+					"path": [
+						"api",
+						"sign"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Key",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"user_id\": \"{{user_id}}\",\n    \"public_key_id\": \"{{public_key_id}}\",\n    \"public_key_room_id\": \"{{public_key_room_id}}\",\n    \"participants_count\": 3,\n    \"participants_threshold\": 2,\n    \"participant_index\": 1\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base}}/api/public_keys",
+					"host": [
+						"{{base}}"
+					],
+					"path": [
+						"api",
+						"public_keys"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update User",
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": \"{{user_id}}\",\n    \"email\": \"test2@admin.tech\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base}}/api/user",
+					"host": [
+						"{{base}}"
+					],
+					"path": [
+						"api",
+						"user"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get user",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base}}/api/user?id={{user_id}}",
+					"host": [
+						"{{base}}"
+					],
+					"path": [
+						"api",
+						"user"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "{{user_id}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get key",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base}}/api/key?id={{public_key_id}}",
+					"host": [
+						"{{base}}"
+					],
+					"path": [
+						"api",
+						"key"
+					],
+					"query": [
+						{
+							"key": "id",
+							"value": "{{public_key_id}}"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base",
+			"value": "http://localhost:3000",
+			"type": "default"
+		},
+		{
+			"key": "user_id",
+			"value": "224d2cf8-be26-4ac6-9dcd-7429ef212814",
+			"type": "default"
+		},
+		{
+			"key": "public_key_id",
+			"value": "4ed0357b-8fa9-4416-be2f-174575b9c900",
+			"type": "default"
+		},
+		{
+			"key": "sign_room_id",
+			"value": "a8b451fe-5e4e-4ace-aaba-683d1467d9a5",
+			"type": "string"
+		},
+		{
+			"key": "public_key_room_id",
+			"value": "31694e3c-d98b-474d-a336-25243f3c8ce9",
+			"type": "string"
+		}
+	]
+}

@@ -1,10 +1,12 @@
 .idea
+.git
 /target
 
 local-share*.json
 /key*.json
 
-.cargo
+docker-compose*
+Makefile
+*.md
 
-/keys
-!/keys/.keep
+backend

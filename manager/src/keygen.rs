@@ -44,10 +44,12 @@ struct KeygenParams {
   user_id: String,
   key_id: String,
   room_id: String,
-  relay_address: String,
   participant_index: u16,
   participants_count: u16,
   participants_threshold: u16,
+
+  #[serde(default = "Config::relay_address")]
+  relay_address: String,
 
   #[serde(default = "Config::default_timeout_seconds")]
   timeout_seconds: u64,

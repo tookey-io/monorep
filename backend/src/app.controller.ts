@@ -23,14 +23,13 @@ const keys: Map<string, PublicKey> = new Map();
   const key = new PublicKey();
 
   key.id = '4ed0357b-8fa9-4416-be2f-174575b9c900';
-  key.room_id = '4ed0357b-8fa9-4416-be2f-174575b9c900';
-  key.public_key =
-    '03dece7916fbed8c71175064e034b4e010a590f4ff745a204e03ca4fb32ead0af3';
+  key.room_id = '31694e3c-d98b-474d-a336-25243f3c8ce9';
+  key.public_key = '';
   key.participants_count = 3;
   key.participant_index = 1;
   key.participants_threshold = 2;
   key.participants_confirmations = [1, 2, 3];
-  key.status = 'finished';
+  key.status = 'created';
   key.rooms = new Map();
 
   keys.set(key.id, key);
@@ -104,7 +103,7 @@ export class AppController {
     const key = new PublicKey();
 
     key.id = body.public_key_id || randomUUID();
-    key.room_id = body.public_key_id || randomUUID();
+    key.room_id = body.public_key_room_id || randomUUID();
     key.public_key = null;
     key.participants_count = body.participants_count || 2;
     key.participant_index = body.participant_index || 1;
@@ -122,7 +121,6 @@ export class AppController {
       user_id: user.id,
       room_id: key.room_id,
       key_id: key.id,
-      relay_address: 'http://localhost:8000',
       participant_index: key.participant_index,
       participants_count: key.participants_count,
       participants_threshold: key.participants_threshold - 1,
@@ -168,7 +166,6 @@ export class AppController {
       user_id: body.user_id,
       room_id: room.id,
       key_id: key.id,
-      relay_address: 'http://localhost:8000',
       data: room.data,
       participants_indexes: room.participant_indexes,
     };
