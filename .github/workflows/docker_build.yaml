@@ -1,0 +1,42 @@
+name: docker_build
+
+on:
+  push:
+    branches:
+      - 'master'
+      - 'feature/ci-cd'
+
+jobs:
+  docker_build:
+    runs-on: ubuntu-latest
+    env:
+      RUST_TARGET: x86_64-unknown-linux-gnu
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: ./.github/actions/setup/
+      - run: |
+          cargo fmt -- --check && cargo clippy -- -Dwarnings && cargo test
+
+      - name: Set docker tag
+        run: |
+          # Short name for current branch. For PRs, use target branch (base ref)
+          GIT_BRANCH=${GITHUB_BASE_REF:-${GITHUB_REF#refs/heads/}}
+          GIT_BRANCH=${GIT_BRANCH//\//-} # Replace / with -
+          GIT_BRANCH=${GIT_BRANCH//_/-} # Replace _ with -
+          GIT_BRANCH=${GIT_BRANCH,,} # Lower case
+          echo "GIT_BRANCH=$GIT_BRANCH" >> $GITHUB_ENV
+
+      - name: Install doctl and Authorize to Digital Ocean
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Build, cache and push docker image
+        users: docker/build-push-action@v3
+        with:
+          push: true
+          tags: registry.digitalocean.com/tookey/${{ github.event.repository.name }}:$GIT_BRANCH-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
