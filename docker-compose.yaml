@@ -25,3 +25,30 @@ services:
       VAULT_DEV_ROOT_TOKEN_ID: 'password'
     cap_add:
       - IPC_LOCK
+
+  relay:
+    container_name: 2k_relay
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: [ "/bin/sh", "-c", "sleep 10 && cargo watch -w ./relay -s 'cargo run --bin relay'" ]
+    environment:
+      ROCKET_ADDRESS: '0.0.0.0'
+    ports:
+      - '127.0.0.1:8000:8000'
+    volumes:
+      - ./relay:/app/relay:ro
+      - ./keys:/app/keys:rw
+
+  manager:
+    container_name: 2k_manager
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: [ "/bin/sh", "-c", "sleep 10 && cargo watch -w ./manager -s 'cargo run --bin manager'" ]
+    environment:
+      RELAY_ADDRESS: 'http://2k_relay:8000'
+      AMQP_ADDRESS: 'amqp://guest:guest@2k_rabbitmq:5672//'
+      VAULT_ADDRESS: 'http://2k_vault:8200'
+    volumes:
+      - ./manager:/app/manager:ro
