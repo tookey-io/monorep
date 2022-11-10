@@ -3,8 +3,8 @@ use futures::StreamExt;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-use tss::ecdsa::state_machine::keygen::Keygen;
 use round_based::async_runtime::AsyncProtocol;
+use tss::ecdsa::state_machine::keygen::Keygen;
 
 use tss_cli::join_computation;
 

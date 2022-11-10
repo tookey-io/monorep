@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-    use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context};
 use curv::{
     arithmetic::Integer,
     elliptic::curves::{
@@ -11,8 +11,8 @@ use curv::{
 };
 use serde::{Deserialize, Serialize};
 use web3::{
-    ethabi::{Address, ethereum_types::Signature},
-    signing::{keccak256},
+    ethabi::{ethereum_types::Signature, Address},
+    signing::keccak256,
     types::{Recovery, RecoveryMessage, TransactionRequest, H256, H512},
 };
 
@@ -97,7 +97,9 @@ where
         H256::from_slice(signature.s.to_bytes().as_ref()),
     );
 
-    let (signature, v) = rec.as_signature().ok_or(anyhow!("failed take signature from recoverable"))?;
+    let (signature, v) = rec
+        .as_signature()
+        .ok_or(anyhow!("failed take signature from recoverable"))?;
 
     let mut slice: [u8; 65] = [0u8; 65];
 

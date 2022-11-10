@@ -31,9 +31,9 @@ use thiserror::Error;
 
 use crate::ecdsa::utilities::mta::MessageA;
 
-use curv::elliptic::curves::secp256_k1::Secp256k1;
 use crate::ecdsa::party_i::{SignBroadcastPhase1, SignDecommitPhase1, SignatureRecid};
 use crate::ecdsa::state_machine::keygen::LocalKey;
+use curv::elliptic::curves::secp256_k1::Secp256k1;
 
 mod fmt;
 mod rounds;
@@ -145,9 +145,7 @@ impl OfflineStage {
             }
             OfflineR::R1(round) if !store1_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs1.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveMessagesFromStore)?;
                 next_state = round
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R2)
@@ -160,9 +158,7 @@ impl OfflineStage {
             }
             OfflineR::R2(round) if !store2_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs2.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveMessagesFromStore)?;
                 next_state = round
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R3)
@@ -175,9 +171,7 @@ impl OfflineStage {
             }
             OfflineR::R3(round) if !store3_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs3.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveMessagesFromStore)?;
                 next_state = round
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R4)
@@ -190,9 +184,7 @@ impl OfflineStage {
             }
             OfflineR::R4(round) if !store4_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs4.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveMessagesFromStore)?;
                 next_state = round
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R5)
@@ -205,9 +197,7 @@ impl OfflineStage {
             }
             OfflineR::R5(round) if !store5_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs5.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveMessagesFromStore)?;
                 next_state = round
                     .proceed(msgs, &mut self.msgs_queue)
                     .map(OfflineR::R6)
@@ -220,9 +210,7 @@ impl OfflineStage {
             }
             OfflineR::R6(round) if !store6_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs6.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveMessagesFromStore)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveMessagesFromStore)?;
                 next_state = round
                     .proceed(msgs)
                     .map(OfflineR::Finished)
@@ -258,13 +246,10 @@ impl StateMachine for OfflineStage {
 
         match msg.body {
             OfflineProtocolMessage(OfflineM::M1(m)) => {
-                let store = self
-                    .msgs1
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 1,
-                    })?;
+                let store = self.msgs1.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 1,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -274,13 +259,10 @@ impl StateMachine for OfflineStage {
                     .map_err(Error::HandleMessage)?;
             }
             OfflineProtocolMessage(OfflineM::M2(m)) => {
-                let store = self
-                    .msgs2
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 2,
-                    })?;
+                let store = self.msgs2.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 2,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -290,13 +272,10 @@ impl StateMachine for OfflineStage {
                     .map_err(Error::HandleMessage)?;
             }
             OfflineProtocolMessage(OfflineM::M3(m)) => {
-                let store = self
-                    .msgs3
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 2,
-                    })?;
+                let store = self.msgs3.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 2,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -306,13 +285,10 @@ impl StateMachine for OfflineStage {
                     .map_err(Error::HandleMessage)?;
             }
             OfflineProtocolMessage(OfflineM::M4(m)) => {
-                let store = self
-                    .msgs4
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 2,
-                    })?;
+                let store = self.msgs4.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 2,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -322,13 +298,10 @@ impl StateMachine for OfflineStage {
                     .map_err(Error::HandleMessage)?;
             }
             OfflineProtocolMessage(OfflineM::M5(m)) => {
-                let store = self
-                    .msgs5
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 2,
-                    })?;
+                let store = self.msgs5.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 2,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -338,13 +311,10 @@ impl StateMachine for OfflineStage {
                     .map_err(Error::HandleMessage)?;
             }
             OfflineProtocolMessage(OfflineM::M6(m)) => {
-                let store = self
-                    .msgs6
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 2,
-                    })?;
+                let store = self.msgs6.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 2,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -539,9 +509,7 @@ pub enum Error {
     ProceedRound(rounds::Error),
 
     /// Received message which we didn't expect to receive now (e.g. message from previous round)
-    #[error(
-        "didn't expect to receive message from round {msg_round} (being at round {current_round})"
-    )]
+    #[error("didn't expect to receive message from round {msg_round} (being at round {current_round})")]
     ReceivedOutOfOrderMessage { current_round: u16, msg_round: u16 },
     /// Received message didn't pass pre-validation
     #[error("received message didn't pass pre-validation: {0}")]
@@ -638,9 +606,7 @@ impl SignManual {
     /// `sigs` must not include partial signature produced by local party (only partial signatures produced
     /// by other parties)
     pub fn complete(self, sigs: &[PartialSignature]) -> Result<SignatureRecid, SignError> {
-        self.state
-            .proceed_manual(sigs)
-            .map_err(SignError::CompleteSigning)
+        self.state.proceed_manual(sigs).map_err(SignError::CompleteSigning)
     }
 }
 
@@ -663,22 +629,13 @@ mod test {
     use crate::ecdsa::party_i::verify;
     use crate::ecdsa::state_machine::keygen::test::simulate_keygen;
 
-    fn simulate_offline_stage(
-        local_keys: Vec<LocalKey<Secp256k1>>,
-        s_l: &[u16],
-    ) -> Vec<CompletedOfflineStage> {
+    fn simulate_offline_stage(local_keys: Vec<LocalKey<Secp256k1>>, s_l: &[u16]) -> Vec<CompletedOfflineStage> {
         let mut simulation = Simulation::new();
         simulation.enable_benchmarks(true);
 
         for (i, &keygen_i) in (1..).zip(s_l) {
-            simulation.add_party(
-                OfflineStage::new(
-                    i,
-                    s_l.to_vec(),
-                    local_keys[usize::from(keygen_i - 1)].clone(),
-                )
-                .unwrap(),
-            );
+            simulation
+                .add_party(OfflineStage::new(i, s_l.to_vec(), local_keys[usize::from(keygen_i - 1)].clone()).unwrap());
         }
 
         let stages = simulation.run().unwrap();
@@ -690,9 +647,7 @@ mod test {
     }
 
     fn simulate_signing(offline: Vec<CompletedOfflineStage>, message: &[u8]) {
-        let message = Sha256::new()
-            .chain_bigint(&BigInt::from_bytes(message))
-            .result_bigint();
+        let message = Sha256::new().chain_bigint(&BigInt::from_bytes(message)).result_bigint();
         let pk = offline[0].public_key().clone();
 
         let parties = offline

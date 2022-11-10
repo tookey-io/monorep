@@ -109,9 +109,7 @@ impl Keygen {
             }
             R::Round1(round) if !store1_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs1.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveRoundMessages)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveRoundMessages)?;
                 next_state = round
                     .proceed(msgs, self.gmap_queue(M::Round2))
                     .map(R::Round2)
@@ -124,9 +122,7 @@ impl Keygen {
             }
             R::Round2(round) if !store2_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs2.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveRoundMessages)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveRoundMessages)?;
                 next_state = round
                     .proceed(msgs, self.gmap_queue(M::Round3))
                     .map(R::Round3)
@@ -139,9 +135,7 @@ impl Keygen {
             }
             R::Round3(round) if !store3_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs3.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveRoundMessages)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveRoundMessages)?;
                 next_state = round
                     .proceed(msgs, self.gmap_queue(M::Round4))
                     .map(R::Round4)
@@ -154,13 +148,8 @@ impl Keygen {
             }
             R::Round4(round) if !store4_wants_more && (!round.is_expensive() || may_block) => {
                 let store = self.msgs4.take().ok_or(InternalError::StoreGone)?;
-                let msgs = store
-                    .finish()
-                    .map_err(InternalError::RetrieveRoundMessages)?;
-                next_state = round
-                    .proceed(msgs)
-                    .map(R::Final)
-                    .map_err(Error::ProceedRound)?;
+                let msgs = store.finish().map_err(InternalError::RetrieveRoundMessages)?;
+                next_state = round.proceed(msgs).map(R::Final).map_err(Error::ProceedRound)?;
                 true
             }
             s @ R::Round4(_) => {
@@ -192,13 +181,10 @@ impl StateMachine for Keygen {
 
         match msg.body {
             ProtocolMessage(M::Round1(m)) => {
-                let store = self
-                    .msgs1
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 1,
-                    })?;
+                let store = self.msgs1.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 1,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -209,13 +195,10 @@ impl StateMachine for Keygen {
                 self.proceed_round(false)
             }
             ProtocolMessage(M::Round2(m)) => {
-                let store = self
-                    .msgs2
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 2,
-                    })?;
+                let store = self.msgs2.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 2,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -226,13 +209,10 @@ impl StateMachine for Keygen {
                 self.proceed_round(false)
             }
             ProtocolMessage(M::Round3(m)) => {
-                let store = self
-                    .msgs3
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 3,
-                    })?;
+                let store = self.msgs3.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 3,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -243,13 +223,10 @@ impl StateMachine for Keygen {
                 self.proceed_round(false)
             }
             ProtocolMessage(M::Round4(m)) => {
-                let store = self
-                    .msgs4
-                    .as_mut()
-                    .ok_or(Error::ReceivedOutOfOrderMessage {
-                        current_round,
-                        msg_round: 4,
-                    })?;
+                let store = self.msgs4.as_mut().ok_or(Error::ReceivedOutOfOrderMessage {
+                    current_round,
+                    msg_round: 4,
+                })?;
                 store
                     .push_msg(Msg {
                         sender: msg.sender,
@@ -449,9 +426,7 @@ pub enum Error {
     #[error("received message didn't pass pre-validation: {0}")]
     HandleMessage(#[source] StoreErr),
     /// Received message which we didn't expect to receive now (e.g. message from previous round)
-    #[error(
-        "didn't expect to receive message from round {msg_round} (being at round {current_round})"
-    )]
+    #[error("didn't expect to receive message from round {msg_round} (being at round {current_round})")]
     ReceivedOutOfOrderMessage { current_round: u16, msg_round: u16 },
     /// [Keygen::pick_output] called twice
     #[error("pick_output called twice")]

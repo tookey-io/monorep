@@ -12,10 +12,8 @@ use round_based::containers::{self, BroadcastMsgs, P2PMsgs, Store};
 use round_based::Msg;
 use zk_paillier::zkproofs::DLogStatement;
 
-use crate::ecdsa::party_i::{
-    KeyGenBroadcastMessage1, KeyGenDecommitMessage1, Keys,
-};
 use crate::ecdsa::errors::ErrorType;
+use crate::ecdsa::party_i::{KeyGenBroadcastMessage1, KeyGenDecommitMessage1, Keys};
 
 pub struct Round0 {
     pub party_i: u16,
@@ -29,8 +27,7 @@ impl Round0 {
         O: Push<Msg<crate::ecdsa::party_i::KeyGenBroadcastMessage1>>,
     {
         let party_keys = Keys::create(self.party_i as usize);
-        let (bc1, decom1) =
-            party_keys.phase1_broadcast_phase3_proof_of_correct_key_proof_of_correct_h1h2();
+        let (bc1, decom1) = party_keys.phase1_broadcast_phase3_proof_of_correct_key_proof_of_correct_h1h2();
 
         output.push(Msg {
             sender: self.party_i,
@@ -61,11 +58,7 @@ pub struct Round1 {
 }
 
 impl Round1 {
-    pub fn proceed<O>(
-        self,
-        input: BroadcastMsgs<KeyGenBroadcastMessage1>,
-        mut output: O,
-    ) -> Result<Round2>
+    pub fn proceed<O>(self, input: BroadcastMsgs<KeyGenBroadcastMessage1>, mut output: O) -> Result<Round2>
     where
         O: Push<Msg<crate::ecdsa::party_i::KeyGenDecommitMessage1>>,
     {
@@ -103,11 +96,7 @@ pub struct Round2 {
 }
 
 impl Round2 {
-    pub fn proceed<O>(
-        self,
-        input: BroadcastMsgs<KeyGenDecommitMessage1>,
-        mut output: O,
-    ) -> Result<Round3>
+    pub fn proceed<O>(self, input: BroadcastMsgs<KeyGenDecommitMessage1>, mut output: O) -> Result<Round3>
     where
         O: Push<Msg<(VerifiableSS<Secp256k1>, Scalar<Secp256k1>)>>,
     {
@@ -225,10 +214,7 @@ impl Round3 {
     pub fn is_expensive(&self) -> bool {
         true
     }
-    pub fn expects_messages(
-        i: u16,
-        n: u16,
-    ) -> Store<P2PMsgs<(VerifiableSS<Secp256k1>, Scalar<Secp256k1>)>> {
+    pub fn expects_messages(i: u16, n: u16) -> Store<P2PMsgs<(VerifiableSS<Secp256k1>, Scalar<Secp256k1>)>> {
         containers::P2PMsgsStore::new(i, n)
     }
 }
@@ -247,23 +233,15 @@ pub struct Round4 {
 }
 
 impl Round4 {
-    pub fn proceed(
-        self,
-        input: BroadcastMsgs<DLogProof<Secp256k1, Sha256>>,
-    ) -> Result<LocalKey<Secp256k1>> {
+    pub fn proceed(self, input: BroadcastMsgs<DLogProof<Secp256k1, Sha256>>) -> Result<LocalKey<Secp256k1>> {
         let params = crate::ecdsa::party_i::Parameters {
             threshold: self.t,
             share_count: self.n,
         };
         let dlog_proofs = input.into_vec_including_me(self.own_dlog_proof.clone());
 
-        Keys::verify_dlog_proofs_check_against_vss(
-            &params,
-            &dlog_proofs,
-            &self.y_vec,
-            &self.vss_vec,
-        )
-        .map_err(ProceedError::Round4VerifyDLogProof)?;
+        Keys::verify_dlog_proofs_check_against_vss(&params, &dlog_proofs, &self.y_vec, &self.vss_vec)
+            .map_err(ProceedError::Round4VerifyDLogProof)?;
         let pk_vec = (0..params.share_count as usize)
             .map(|i| dlog_proofs[i].pk.clone())
             .collect::<Vec<Point<Secp256k1>>>();

@@ -27,8 +27,8 @@ use zk_paillier::zkproofs::DLogStatement;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-use crate::ecdsa::utilities::mta::range_proofs::AliceProof;
 use crate::ecdsa::errors::Error::{self, InvalidKey};
+use crate::ecdsa::utilities::mta::range_proofs::AliceProof;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MessageA {
@@ -48,11 +48,7 @@ impl MessageA {
     /// - other parties' `h1,h2,N_tilde`s for range proofs.
     /// If range proofs are not needed (one example is identification of aborts where we
     /// only want to reconstruct a ciphertext), `dlog_statements` can be an empty slice.
-    pub fn a(
-        a: &Scalar<Secp256k1>,
-        alice_ek: &EncryptionKey,
-        dlog_statements: &[DLogStatement],
-    ) -> (Self, BigInt) {
+    pub fn a(a: &Scalar<Secp256k1>, alice_ek: &EncryptionKey, dlog_statements: &[DLogStatement]) -> (Self, BigInt) {
         let randomness = BigInt::sample_below(&alice_ek.n);
         let m_a = MessageA::a_with_predefined_randomness(a, alice_ek, &randomness, dlog_statements);
         (m_a, randomness)
@@ -74,9 +70,7 @@ impl MessageA {
         .into_owned();
         let alice_range_proofs = dlog_statements
             .iter()
-            .map(|dlog_statement| {
-                AliceProof::generate(&a.to_bigint(), &c_a, alice_ek, dlog_statement, randomness)
-            })
+            .map(|dlog_statement| AliceProof::generate(&a.to_bigint(), &c_a, alice_ek, dlog_statement, randomness))
             .collect::<Vec<AliceProof>>();
 
         Self {
@@ -95,14 +89,8 @@ impl MessageB {
     ) -> Result<(Self, Scalar<Secp256k1>, BigInt, BigInt), Error> {
         let beta_tag = BigInt::sample_below(&alice_ek.n);
         let randomness = BigInt::sample_below(&alice_ek.n);
-        let (m_b, beta) = MessageB::b_with_predefined_randomness(
-            b,
-            alice_ek,
-            m_a,
-            &randomness,
-            &beta_tag,
-            dlog_statements,
-        )?;
+        let (m_b, beta) =
+            MessageB::b_with_predefined_randomness(b, alice_ek, m_a, &randomness, &beta_tag, dlog_statements)?;
 
         Ok((m_b, beta, randomness, beta_tag))
     }
@@ -136,11 +124,7 @@ impl MessageB {
         );
 
         let b_bn = b.to_bigint();
-        let b_c_a = Paillier::mul(
-            alice_ek,
-            RawCiphertext::from(m_a.c),
-            RawPlaintext::from(b_bn),
-        );
+        let b_c_a = Paillier::mul(alice_ek, RawCiphertext::from(m_a.c), RawPlaintext::from(b_bn));
         let c_b = Paillier::add(alice_ek, b_c_a, c_beta_tag);
         let beta = Scalar::<Secp256k1>::zero() - &beta_tag_fe;
         let dlog_proof_b = DLogProof::prove(b);
@@ -177,10 +161,7 @@ impl MessageB {
         }
     }
 
-    pub fn verify_b_against_public(
-        public_gb: &Point<Secp256k1>,
-        mta_gb: &Point<Secp256k1>,
-    ) -> bool {
+    pub fn verify_b_against_public(public_gb: &Point<Secp256k1>, mta_gb: &Point<Secp256k1>) -> bool {
         public_gb == mta_gb
     }
 }

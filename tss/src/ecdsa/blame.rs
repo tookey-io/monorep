@@ -196,9 +196,7 @@ impl GlobalStatePhase5 {
                         })
                         .collect::<Vec<Scalar<Secp256k1>>>();
 
-                    let beta_sum = beta_vec
-                        .iter()
-                        .fold(Scalar::<Secp256k1>::zero(), |acc, x| acc + x);
+                    let beta_sum = beta_vec.iter().fold(Scalar::<Secp256k1>::zero(), |acc, x| acc + x);
 
                     k_i_gamma_i + alpha_sum + beta_sum
                 })
@@ -363,8 +361,7 @@ impl GlobalStatePhase6 {
                             let k_i = &self.k_vec[i];
                             let g_w_j = &self.g_w_vec[ind];
                             let g_w_j_ki = g_w_j * k_i;
-                            let miu: Scalar<Secp256k1> =
-                                Scalar::<Secp256k1>::from(&self.miu_vec[i][j]);
+                            let miu: Scalar<Secp256k1> = Scalar::<Secp256k1>::from(&self.miu_vec[i][j]);
                             let g_miu = Point::generator() * &miu;
                             g_w_j_ki - &g_miu
                         })

@@ -38,13 +38,9 @@ fn test_zk_pdl_with_slack() {
 
     let Q = Point::generator() * &x;
 
-    let c = Paillier::encrypt_with_chosen_randomness(
-        &ek,
-        RawPlaintext::from(x.to_bigint()),
-        &randomness,
-    )
-    .0
-    .into_owned();
+    let c = Paillier::encrypt_with_chosen_randomness(&ek, RawPlaintext::from(x.to_bigint()), &randomness)
+        .0
+        .into_owned();
 
     // Generate PDL with slack statement, witness and proof
     let pdl_w_slack_statement = PDLwSlackStatement {
@@ -99,13 +95,10 @@ fn test_zk_pdl_with_slack_soundness() {
     let Q = Point::generator() * &x;
 
     // here we encrypt x + 1 instead of x:
-    let c = Paillier::encrypt_with_chosen_randomness(
-        &ek,
-        RawPlaintext::from(x.to_bigint() + BigInt::one()),
-        &randomness,
-    )
-    .0
-    .into_owned();
+    let c =
+        Paillier::encrypt_with_chosen_randomness(&ek, RawPlaintext::from(x.to_bigint() + BigInt::one()), &randomness)
+            .0
+            .into_owned();
 
     // Generate PDL with slack statement, witness and proof
     let pdl_w_slack_statement = PDLwSlackStatement {

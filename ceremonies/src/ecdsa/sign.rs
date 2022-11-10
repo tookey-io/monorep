@@ -1,15 +1,13 @@
 use anyhow::{anyhow, Context, Result};
 use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
 use derive_more::TryInto;
-use futures::{channel::mpsc::channel, Sink, SinkExt, Stream, StreamExt, TryStreamExt, FutureExt};
+use futures::{channel::mpsc::channel, FutureExt, Sink, SinkExt, Stream, StreamExt, TryStreamExt};
 use round_based::{AsyncProtocol, Msg};
 use tss::ecdsa::{
     party_i::SignatureRecid,
     state_machine::{
         keygen::LocalKey,
-        sign::{
-            Error as SignError, OfflineProtocolMessage, OfflineStage, PartialSignature, SignManual,
-        },
+        sign::{Error as SignError, OfflineProtocolMessage, OfflineStage, PartialSignature, SignManual},
     },
 };
 
@@ -35,30 +33,25 @@ where
         .position(|p| *p == local_share.i)
         .map(|v| v + 1)
         .ok_or(anyhow!("Not in party"))? as u16;
-        
+
     let number_of_parties = parties.len();
 
     tokio::pin!(outgoing);
 
     // let receiver_offline = futures::stream::iter(vec![]);
-    let (mut incoming_offline_sender, incoming_offline_receiver) =
-        channel::<Result<_, SignError>>(102400);
+    let (mut incoming_offline_sender, incoming_offline_receiver) = channel::<Result<_, SignError>>(102400);
 
     let (outgoing_offline_sender, outgoing_offline_receiver) = channel(102400);
 
-    let (mut incoming_partial_sender, incoming_partial_receiver) =
-        channel::<Result<_, SignError>>(102400);
+    let (mut incoming_partial_sender, incoming_partial_receiver) = channel::<Result<_, SignError>>(102400);
     let (mut outgoing_partial_sender, outgoing_partial_receiver) = channel(102400);
 
-    let outgoing_offline_receiver = outgoing_offline_receiver
-        .map(|msg| Messages::OfflineStage(msg))
-        .boxed();
+    let outgoing_offline_receiver = outgoing_offline_receiver.map(|msg| Messages::OfflineStage(msg)).boxed();
     let outgoing_partial_receiver = outgoing_partial_receiver
         .map(|msg| Messages::PartialSignature(msg))
         .boxed();
 
-    let outgoin_stream =
-        futures::stream::select_all(vec![outgoing_offline_receiver, outgoing_partial_receiver]);
+    let outgoin_stream = futures::stream::select_all(vec![outgoing_offline_receiver, outgoing_partial_receiver]);
 
     let send_outgoings = async move {
         tokio::pin!(outgoin_stream);
@@ -99,16 +92,14 @@ where
         tokio::pin!(incoming_offline_receiver);
         tokio::pin!(outgoing_offline_sender);
 
-        let mut protocol =
-            AsyncProtocol::new(signing, incoming_offline_receiver, outgoing_offline_sender);
+        let mut protocol = AsyncProtocol::new(signing, incoming_offline_receiver, outgoing_offline_sender);
 
         let completed_offline_stage = protocol
             .run()
             .await
             .map_err(|e| anyhow!("protocol execution terminated with error: {}", e))?;
 
-        let (signing, partial_signature) =
-            SignManual::new(hash, completed_offline_stage)?;
+        let (signing, partial_signature) = SignManual::new(hash, completed_offline_stage)?;
 
         outgoing_partial_sender
             .send(Msg {
@@ -125,9 +116,7 @@ where
             .try_collect()
             .await?;
 
-        let signature = signing
-            .complete(&partial_signatures)
-            .context("online stage failed")?;
+        let signature = signing.complete(&partial_signatures).context("online stage failed")?;
 
         Ok::<_, anyhow::Error>(signature)
     };

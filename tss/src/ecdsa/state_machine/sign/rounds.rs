@@ -16,14 +16,12 @@ use round_based::Msg;
 
 use crate::ecdsa::utilities::mta::{MessageA, MessageB};
 
+use crate::ecdsa::errors::ErrorType;
+use crate::ecdsa::party_i::{LocalSignature, SignBroadcastPhase1, SignDecommitPhase1, SignKeys, SignatureRecid};
+use crate::ecdsa::state_machine::keygen::LocalKey;
 use crate::ecdsa::utilities::zk_pdl_with_slack::PDLwSlackProof;
 use curv::cryptographic_primitives::proofs::sigma_correct_homomorphic_elgamal_enc::HomoELGamalProof;
 use curv::cryptographic_primitives::proofs::sigma_valid_pedersen::PedersenProof;
-use crate::ecdsa::party_i::{
-    LocalSignature, SignBroadcastPhase1, SignDecommitPhase1, SignKeys, SignatureRecid,
-};
-use crate::ecdsa::state_machine::keygen::LocalKey;
-use crate::ecdsa::errors::ErrorType;
 
 type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -72,11 +70,7 @@ impl Round0 {
             &self.local_key.keys_linear.x_i,
             &self.local_key.vss_scheme.clone(),
             usize::from(self.s_l[usize::from(self.i - 1)]) - 1,
-            &self
-                .s_l
-                .iter()
-                .map(|&i| usize::from(i) - 1)
-                .collect::<Vec<_>>(),
+            &self.s_l.iter().map(|&i| usize::from(i) - 1).collect::<Vec<_>>(),
         );
         let (bc1, decom1) = sign_keys.phase1_broadcast();
 
@@ -118,11 +112,7 @@ pub struct Round1 {
 }
 
 impl Round1 {
-    pub fn proceed<O>(
-        self,
-        input: BroadcastMsgs<(MessageA, SignBroadcastPhase1)>,
-        mut output: O,
-    ) -> Result<Round2>
+    pub fn proceed<O>(self, input: BroadcastMsgs<(MessageA, SignBroadcastPhase1)>, mut output: O) -> Result<Round2>
     where
         O: Push<Msg<(GammaI, WI)>>,
     {
@@ -137,12 +127,7 @@ impl Round1 {
         let mut ni_vec = Vec::new();
 
         let ttag = self.s_l.len();
-        let l_s: Vec<_> = self
-            .s_l
-            .iter()
-            .cloned()
-            .map(|i| usize::from(i) - 1)
-            .collect();
+        let l_s: Vec<_> = self.s_l.iter().cloned().map(|i| usize::from(i) - 1).collect();
         let i = usize::from(self.i - 1);
         for j in 0..ttag - 1 {
             let ind = if j < i { j } else { j + 1 };
@@ -192,10 +177,7 @@ impl Round1 {
         })
     }
 
-    pub fn expects_messages(
-        i: u16,
-        n: u16,
-    ) -> Store<BroadcastMsgs<(MessageA, SignBroadcastPhase1)>> {
+    pub fn expects_messages(i: u16, n: u16) -> Store<BroadcastMsgs<(MessageA, SignBroadcastPhase1)>> {
         containers::BroadcastMsgsStore::new(i, n)
     }
 
@@ -233,17 +215,8 @@ impl Round2 {
 
         let ttag = self.s_l.len();
         let index = usize::from(self.i) - 1;
-        let l_s: Vec<_> = self
-            .s_l
-            .iter()
-            .cloned()
-            .map(|i| usize::from(i) - 1)
-            .collect();
-        let g_w_vec = SignKeys::g_w_vec(
-            &self.local_key.pk_vec[..],
-            &l_s[..],
-            &self.local_key.vss_scheme,
-        );
+        let l_s: Vec<_> = self.s_l.iter().cloned().map(|i| usize::from(i) - 1).collect();
+        let g_w_vec = SignKeys::g_w_vec(&self.local_key.pk_vec[..], &l_s[..], &self.local_key.vss_scheme);
         for j in 0..ttag - 1 {
             let ind = if j < index { j } else { j + 1 };
             let m_b = m_b_gamma_s[j].clone();
@@ -268,11 +241,7 @@ impl Round2 {
         output.push(Msg {
             sender: self.i,
             receiver: None,
-            body: (
-                DeltaI(delta_i.clone()),
-                TI(t_i.clone()),
-                TIProof(t_i_proof.clone()),
-            ),
+            body: (DeltaI(delta_i.clone()), TI(t_i.clone()), TIProof(t_i_proof.clone())),
         });
 
         Ok(Round3 {
@@ -321,20 +290,12 @@ pub struct Round3 {
 }
 
 impl Round3 {
-    pub fn proceed<O>(
-        self,
-        input: BroadcastMsgs<(DeltaI, TI, TIProof)>,
-        mut output: O,
-    ) -> Result<Round4>
+    pub fn proceed<O>(self, input: BroadcastMsgs<(DeltaI, TI, TIProof)>, mut output: O) -> Result<Round4>
     where
         O: Push<Msg<SignDecommitPhase1>>,
     {
         let (delta_vec, t_vec, t_proof_vec) = input
-            .into_vec_including_me((
-                DeltaI(self.delta_i),
-                TI(self.t_i.clone()),
-                TIProof(self.t_i_proof),
-            ))
+            .into_vec_including_me((DeltaI(self.delta_i), TI(self.t_i.clone()), TIProof(self.t_i_proof)))
             .into_iter()
             .map(|(delta_i, t_i, t_i_proof)| (delta_i.0, t_i.0, t_i_proof.0))
             .unzip3();
@@ -400,11 +361,7 @@ pub struct Round4 {
 }
 
 impl Round4 {
-    pub fn proceed<O>(
-        self,
-        decommit_round1: BroadcastMsgs<SignDecommitPhase1>,
-        mut output: O,
-    ) -> Result<Round5>
+    pub fn proceed<O>(self, decommit_round1: BroadcastMsgs<SignDecommitPhase1>, mut output: O) -> Result<Round5>
     where
         O: Push<Msg<(RDash, Vec<PDLwSlackProof>)>>,
     {
@@ -424,12 +381,7 @@ impl Round4 {
 
         // each party sends first message to all other parties
         let mut phase5_proofs_vec = Vec::new();
-        let l_s: Vec<_> = self
-            .s_l
-            .iter()
-            .cloned()
-            .map(|i| usize::from(i) - 1)
-            .collect();
+        let l_s: Vec<_> = self.s_l.iter().cloned().map(|i| usize::from(i) - 1).collect();
         let index = usize::from(self.i - 1);
         for j in 0..ttag - 1 {
             let ind = if j < index { j } else { j + 1 };
@@ -493,11 +445,7 @@ pub struct Round5 {
 }
 
 impl Round5 {
-    pub fn proceed<O>(
-        self,
-        input: BroadcastMsgs<(RDash, Vec<PDLwSlackProof>)>,
-        mut output: O,
-    ) -> Result<Round6>
+    pub fn proceed<O>(self, input: BroadcastMsgs<(RDash, Vec<PDLwSlackProof>)>, mut output: O) -> Result<Round6>
     where
         O: Push<Msg<(SI, HEGProof)>>,
     {
@@ -507,12 +455,7 @@ impl Round5 {
             .map(|(r_dash, pdl_proof)| (r_dash.0, pdl_proof))
             .unzip();
 
-        let l_s: Vec<_> = self
-            .s_l
-            .iter()
-            .cloned()
-            .map(|i| usize::from(i) - 1)
-            .collect();
+        let l_s: Vec<_> = self.s_l.iter().cloned().map(|i| usize::from(i) - 1).collect();
         let ttag = self.s_l.len();
         for i in 0..ttag {
             LocalSignature::phase5_verify_pdl(
@@ -529,12 +472,8 @@ impl Round5 {
         }
         LocalSignature::phase5_check_R_dash_sum(&r_dash_vec).expect("R_dash error");
 
-        let (S_i, homo_elgamal_proof) = LocalSignature::phase6_compute_S_i_and_proof_of_consistency(
-            &self.R,
-            &self.t_i,
-            &self.sigma_i,
-            &self.l_i,
-        );
+        let (S_i, homo_elgamal_proof) =
+            LocalSignature::phase6_compute_S_i_and_proof_of_consistency(&self.R, &self.t_i, &self.sigma_i, &self.l_i);
 
         output.push(Msg {
             sender: self.i,
@@ -575,10 +514,7 @@ pub struct Round6 {
 }
 
 impl Round6 {
-    pub fn proceed(
-        self,
-        input: BroadcastMsgs<(SI, HEGProof)>,
-    ) -> Result<CompletedOfflineStage, Error> {
+    pub fn proceed(self, input: BroadcastMsgs<(SI, HEGProof)>) -> Result<CompletedOfflineStage, Error> {
         let (S_i_vec, hegp_vec): (Vec<_>, Vec<_>) = input
             .into_vec_including_me((SI(self.S_i), HEGProof(self.homo_elgamal_proof)))
             .into_iter()
@@ -588,13 +524,8 @@ impl Round6 {
             .take(self.s_l.len())
             .collect();
 
-        LocalSignature::phase6_verify_proof(
-            &S_i_vec,
-            &hegp_vec,
-            &R_vec,
-            &self.protocol_output.t_vec,
-        )
-        .map_err(Error::Round6VerifyProof)?;
+        LocalSignature::phase6_verify_proof(&S_i_vec, &hegp_vec, &R_vec, &self.protocol_output.t_vec)
+            .map_err(Error::Round6VerifyProof)?;
         LocalSignature::phase6_check_S_i_sum(&self.protocol_output.local_key.y_sum_s, &S_i_vec)
             .map_err(Error::Round6CheckSig)?;
 
@@ -635,10 +566,7 @@ pub struct Round7 {
 }
 
 impl Round7 {
-    pub fn new(
-        message: &BigInt,
-        completed_offline_stage: CompletedOfflineStage,
-    ) -> Result<(Self, PartialSignature)> {
+    pub fn new(message: &BigInt, completed_offline_stage: CompletedOfflineStage) -> Result<(Self, PartialSignature)> {
         let local_signature = LocalSignature::phase7_local_sig(
             &completed_offline_stage.sign_keys.k_i,
             message,
@@ -652,9 +580,7 @@ impl Round7 {
 
     pub fn proceed_manual(self, sigs: &[PartialSignature]) -> Result<SignatureRecid> {
         let sigs = sigs.iter().map(|s_i| s_i.0.clone()).collect::<Vec<_>>();
-        self.local_signature
-            .output_signature(&sigs)
-            .map_err(Error::Round7)
+        self.local_signature.output_signature(&sigs).map_err(Error::Round7)
     }
 }
 

@@ -36,12 +36,7 @@ struct AliceZkpRound1 {
 }
 
 impl AliceZkpRound1 {
-    fn from(
-        alice_ek: &EncryptionKey,
-        dlog_statement: &DLogStatement,
-        a: &BigInt,
-        q: &BigInt,
-    ) -> Self {
+    fn from(alice_ek: &EncryptionKey, dlog_statement: &DLogStatement, a: &BigInt, q: &BigInt) -> Self {
         let h1 = &dlog_statement.g;
         let h2 = &dlog_statement.ni;
         let N_tilde = &dlog_statement.N;
@@ -50,11 +45,8 @@ impl AliceZkpRound1 {
         let gamma = BigInt::sample_below(&(q.pow(3) * N_tilde));
         let ro = BigInt::sample_below(&(q * N_tilde));
         let z = (BigInt::mod_pow(h1, a, N_tilde) * BigInt::mod_pow(h2, &ro, N_tilde)) % N_tilde;
-        let u = ((alpha.borrow() * &alice_ek.n + 1)
-            * BigInt::mod_pow(&beta, &alice_ek.n, &alice_ek.nn))
-            % &alice_ek.nn;
-        let w =
-            (BigInt::mod_pow(h1, &alpha, N_tilde) * BigInt::mod_pow(h2, &gamma, N_tilde)) % N_tilde;
+        let u = ((alpha.borrow() * &alice_ek.n + 1) * BigInt::mod_pow(&beta, &alice_ek.n, &alice_ek.nn)) % &alice_ek.nn;
+        let w = (BigInt::mod_pow(h1, &alpha, N_tilde) * BigInt::mod_pow(h2, &gamma, N_tilde)) % N_tilde;
         Self {
             alpha,
             beta,
@@ -75,13 +67,7 @@ struct AliceZkpRound2 {
 }
 
 impl AliceZkpRound2 {
-    fn from(
-        alice_ek: &EncryptionKey,
-        round1: &AliceZkpRound1,
-        e: &BigInt,
-        a: &BigInt,
-        r: &BigInt,
-    ) -> Self {
+    fn from(alice_ek: &EncryptionKey, round1: &AliceZkpRound1, e: &BigInt, a: &BigInt, r: &BigInt) -> Self {
         Self {
             s: (BigInt::mod_pow(r, e, &alice_ek.n) * round1.beta.borrow()) % &alice_ek.n,
             s1: (e * a) + round1.alpha.borrow(),
@@ -102,12 +88,7 @@ pub struct AliceProof {
 
 impl AliceProof {
     /// verify Alice's proof using the proof and public keys
-    pub fn verify(
-        &self,
-        cipher: &BigInt,
-        alice_ek: &EncryptionKey,
-        dlog_statement: &DLogStatement,
-    ) -> bool {
+    pub fn verify(&self, cipher: &BigInt, alice_ek: &EncryptionKey, dlog_statement: &DLogStatement) -> bool {
         let N = &alice_ek.n;
         let NN = &alice_ek.nn;
         let N_tilde = &dlog_statement.N;
@@ -126,10 +107,7 @@ impl AliceProof {
             Some(c) => c,
         };
 
-        let w = (BigInt::mod_pow(h1, &self.s1, N_tilde)
-            * BigInt::mod_pow(h2, &self.s2, N_tilde)
-            * z_e_inv)
-            % N_tilde;
+        let w = (BigInt::mod_pow(h1, &self.s1, N_tilde) * BigInt::mod_pow(h2, &self.s2, N_tilde) * z_e_inv) % N_tilde;
 
         let gs1 = (self.s1.borrow() * N + 1) % NN;
         let cipher_e_inv = BigInt::mod_inv(&BigInt::mod_pow(cipher, &self.e, NN), NN);
@@ -164,12 +142,7 @@ impl AliceProof {
         dlog_statement: &DLogStatement,
         r: &BigInt,
     ) -> Self {
-        let round1 = AliceZkpRound1::from(
-            alice_ek,
-            dlog_statement,
-            a,
-            Scalar::<Secp256k1>::group_order(),
-        );
+        let round1 = AliceZkpRound1::from(alice_ek, dlog_statement, a, Scalar::<Secp256k1>::group_order());
 
         let Gen = alice_ek.n.borrow() + 1;
         let e = Sha256::new()
@@ -236,13 +209,9 @@ impl BobZkpRound1 {
         let sigma = BigInt::sample_below(&(q * N_tilde));
         let tau = BigInt::sample_below(&(q.pow(3) * N_tilde));
         let z = (BigInt::mod_pow(h1, &b_bn, N_tilde) * BigInt::mod_pow(h2, &ro, N_tilde)) % N_tilde;
-        let z_prim = (BigInt::mod_pow(h1, &alpha, N_tilde)
-            * BigInt::mod_pow(h2, &ro_prim, N_tilde))
-            % N_tilde;
-        let t = (BigInt::mod_pow(h1, beta_prim, N_tilde) * BigInt::mod_pow(h2, &sigma, N_tilde))
-            % N_tilde;
-        let w =
-            (BigInt::mod_pow(h1, &gamma, N_tilde) * BigInt::mod_pow(h2, &tau, N_tilde)) % N_tilde;
+        let z_prim = (BigInt::mod_pow(h1, &alpha, N_tilde) * BigInt::mod_pow(h2, &ro_prim, N_tilde)) % N_tilde;
+        let t = (BigInt::mod_pow(h1, beta_prim, N_tilde) * BigInt::mod_pow(h2, &sigma, N_tilde)) % N_tilde;
+        let w = (BigInt::mod_pow(h1, &gamma, N_tilde) * BigInt::mod_pow(h2, &tau, N_tilde)) % N_tilde;
         let v = (BigInt::mod_pow(a_encrypted, &alpha, &alice_ek.nn)
             * (gamma.borrow() * &alice_ek.n + 1)
             * BigInt::mod_pow(&beta, &alice_ek.n, &alice_ek.nn))
@@ -343,10 +312,8 @@ impl BobProof {
             Some(c) => c,
         };
 
-        let z_prim = (BigInt::mod_pow(h1, &self.s1, N_tilde)
-            * BigInt::mod_pow(h2, &self.s2, N_tilde)
-            * z_e_inv)
-            % N_tilde;
+        let z_prim =
+            (BigInt::mod_pow(h1, &self.s1, N_tilde) * BigInt::mod_pow(h2, &self.s2, N_tilde) * z_e_inv) % N_tilde;
 
         let mta_e_inv = BigInt::mod_inv(&BigInt::mod_pow(mta_avc_out, &self.e, NN), NN);
         let mta_e_inv = match mta_e_inv {
@@ -366,23 +333,10 @@ impl BobProof {
             Some(c) => c,
         };
 
-        let w = (BigInt::mod_pow(h1, &self.t1, N_tilde)
-            * BigInt::mod_pow(h2, &self.t2, N_tilde)
-            * t_e_inv)
-            % N_tilde;
+        let w = (BigInt::mod_pow(h1, &self.t1, N_tilde) * BigInt::mod_pow(h2, &self.t2, N_tilde) * t_e_inv) % N_tilde;
 
         let Gen = alice_ek.n.borrow() + 1;
-        let mut values_to_hash = vec![
-            &alice_ek.n,
-            &Gen,
-            a_enc,
-            mta_avc_out,
-            &self.z,
-            &z_prim,
-            &self.t,
-            &v,
-            &w,
-        ];
+        let mut values_to_hash = vec![&alice_ek.n, &Gen, a_enc, mta_avc_out, &self.z, &z_prim, &self.t, &v, &w];
         let e = match check {
             Some(_) => {
                 let X_x_coor = check.unwrap().X.x_coord().unwrap();
@@ -619,14 +573,11 @@ pub(crate) mod tests {
         // Alice's secret value
         let a = Scalar::<Secp256k1>::random().to_bigint();
         let r = BigInt::from_paillier_key(&ek);
-        let cipher = Paillier::encrypt_with_chosen_randomness(
-            &ek,
-            RawPlaintext::from(a.clone()),
-            &Randomness::from(&r),
-        )
-        .0
-        .clone()
-        .into_owned();
+        let cipher =
+            Paillier::encrypt_with_chosen_randomness(&ek, RawPlaintext::from(a.clone()), &Randomness::from(&r))
+                .0
+                .clone()
+                .into_owned();
 
         let alice_proof = AliceProof::generate(&a, &cipher, &ek, &dlog_statement, &r);
 
@@ -659,11 +610,8 @@ pub(crate) mod tests {
                 );
                 let beta_prim = BigInt::sample_below(&alice_public_key.n);
                 let r = Randomness::sample(alice_public_key);
-                let enc_beta_prim = Paillier::encrypt_with_chosen_randomness(
-                    alice_public_key,
-                    RawPlaintext::from(&beta_prim),
-                    &r,
-                );
+                let enc_beta_prim =
+                    Paillier::encrypt_with_chosen_randomness(alice_public_key, RawPlaintext::from(&beta_prim), &r);
 
                 let mta_out = Paillier::add(alice_public_key, b_times_enc_a, enc_beta_prim);
 

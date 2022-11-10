@@ -125,9 +125,8 @@ impl Verifier {
         let c_tag = Paillier::add(&statement.ek, ac, b_enc).0.into_owned();
         let ab_concat = a.clone() + b.clone().shl(a.bit_length());
         let blindness = BigInt::sample_below(q);
-        let c_tag_tag = HashCommitment::<Sha256>::create_commitment_with_user_defined_randomness(
-            &ab_concat, &blindness,
-        );
+        let c_tag_tag =
+            HashCommitment::<Sha256>::create_commitment_with_user_defined_randomness(&ab_concat, &blindness);
         let q_tag = &statement.Q * &a_fe + &statement.G * b_fe;
 
         (
@@ -157,8 +156,7 @@ impl Verifier {
             b: state.b.clone(),
             blindness: state.blindness.clone(),
         };
-        let range_proof_is_ok =
-            verify_range_proof(statement, &prover_first_messasge.range_proof).is_ok();
+        let range_proof_is_ok = verify_range_proof(statement, &prover_first_messasge.range_proof).is_ok();
         state.c_hat = prover_first_messasge.c_hat.clone();
         if range_proof_is_ok {
             Ok(decommit_message)
@@ -177,9 +175,7 @@ impl Verifier {
             &prover_second_message.decommit.blindness,
         );
 
-        if prover_first_message.c_hat == c_hat_test
-            && prover_second_message.decommit.q_hat == state.q_tag
-        {
+        if prover_first_message.c_hat == c_hat_test && prover_second_message.decommit.q_hat == state.q_tag {
             Ok(())
         } else {
             Err(ZkPdlError::Finalize)
@@ -224,11 +220,10 @@ impl Prover {
                 .b
                 .clone()
                 .shl(verifier_second_message.a.bit_length()); // b|a (in the paper it is a|b)
-        let c_tag_tag_test =
-            HashCommitment::<Sha256>::create_commitment_with_user_defined_randomness(
-                &ab_concat,
-                &verifier_second_message.blindness,
-            );
+        let c_tag_tag_test = HashCommitment::<Sha256>::create_commitment_with_user_defined_randomness(
+            &ab_concat,
+            &verifier_second_message.blindness,
+        );
         let ax1 = &verifier_second_message.a * witness.x.to_bigint();
         let alpha_test = ax1 + &verifier_second_message.b;
         if alpha_test == state.alpha && verifier_first_message.c_tag_tag == c_tag_tag_test {
@@ -251,10 +246,7 @@ fn generate_range_proof(statement: &PDLStatement, witness: &PDLWitness) -> Range
     )
 }
 
-fn verify_range_proof(
-    statement: &PDLStatement,
-    range_proof: &RangeProofNi,
-) -> Result<(), IncorrectProof> {
+fn verify_range_proof(statement: &PDLStatement, range_proof: &RangeProofNi) -> Result<(), IncorrectProof> {
     range_proof.verify(&statement.ek, &statement.ciphertext)
 }
 

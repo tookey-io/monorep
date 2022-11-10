@@ -91,13 +91,7 @@ impl PDLwSlackProof {
             &alpha,
             &statement.ek.n,
         );
-        let u3 = commitment_unknown_order(
-            &statement.h1,
-            &statement.h2,
-            &statement.N_tilde,
-            &alpha,
-            &gamma,
-        );
+        let u3 = commitment_unknown_order(&statement.h1, &statement.h2, &statement.N_tilde, &alpha, &gamma);
 
         let e = Sha256::new()
             .chain_bigint(&BigInt::from_bytes(statement.G.to_bytes(true).as_ref()))
@@ -136,8 +130,7 @@ impl PDLwSlackProof {
             .result_bigint();
 
         let g_s1 = statement.G.clone() * &Scalar::<Secp256k1>::from(&self.s1);
-        let e_fe_neg: Scalar<Secp256k1> =
-            Scalar::<Secp256k1>::from(&(Scalar::<Secp256k1>::group_order() - &e));
+        let e_fe_neg: Scalar<Secp256k1> = Scalar::<Secp256k1>::from(&(Scalar::<Secp256k1>::group_order() - &e));
         let y_minus_e = &statement.Q * &e_fe_neg;
         let u1_test = g_s1 + y_minus_e;
 
@@ -156,20 +149,9 @@ impl PDLwSlackProof {
             &(-&e),
         );
 
-        let u3_test_tmp = commitment_unknown_order(
-            &statement.h1,
-            &statement.h2,
-            &statement.N_tilde,
-            &self.s1,
-            &self.s3,
-        );
-        let u3_test = commitment_unknown_order(
-            &u3_test_tmp,
-            &self.z,
-            &statement.N_tilde,
-            &BigInt::one(),
-            &(-&e),
-        );
+        let u3_test_tmp =
+            commitment_unknown_order(&statement.h1, &statement.h2, &statement.N_tilde, &self.s1, &self.s3);
+        let u3_test = commitment_unknown_order(&u3_test_tmp, &self.z, &statement.N_tilde, &BigInt::one(), &(-&e));
 
         if self.u1 == u1_test && self.u2 == u2_test && self.u3 == u3_test {
             Ok(())
@@ -179,13 +161,7 @@ impl PDLwSlackProof {
     }
 }
 
-pub fn commitment_unknown_order(
-    h1: &BigInt,
-    h2: &BigInt,
-    N_tilde: &BigInt,
-    x: &BigInt,
-    r: &BigInt,
-) -> BigInt {
+pub fn commitment_unknown_order(h1: &BigInt, h2: &BigInt, N_tilde: &BigInt, x: &BigInt, r: &BigInt) -> BigInt {
     let h1_x = BigInt::mod_pow(h1, x, N_tilde);
     let h2_r = {
         if r < &BigInt::zero() {
