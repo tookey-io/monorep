@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
         .iter()
         .position(|p| *p == local_share.i)
         .map(|v| v + 1)
-        .ok_or(anyhow!("Not in party"))? as u16;
+        .context("Not in party")? as u16;
 
     println!("My id is {} (expected {})", i, expected_id);
 

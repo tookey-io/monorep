@@ -119,10 +119,10 @@ pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
     let outgoing_sender = futures::sink::unfold(outgoing, |mut outgoing, msg| async move {
         let packet = match msg {
             ecdsa::Messages::OfflineStage(msg) => {
-                msg.map_body(|body| serde_json::to_value(body).unwrap_or_else(|_| Value::Null))
+                msg.map_body(|body| serde_json::to_value(body).unwrap_or(Value::Null))
             }
             ecdsa::Messages::PartialSignature(msg) => {
-                msg.map_body(|body| serde_json::to_value(body).unwrap_or_else(|_| Value::Null))
+                msg.map_body(|body| serde_json::to_value(body).unwrap_or(Value::Null))
             }
         };
 

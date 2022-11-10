@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use curv::{
     arithmetic::Integer,
     elliptic::curves::{
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use web3::{
     ethabi::{ethereum_types::Signature, Address},
     signing::keccak256,
-    types::{Recovery, RecoveryMessage, TransactionRequest, H256, H512},
+    types::{Recovery, RecoveryMessage, TransactionRequest, H256},
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -65,7 +65,7 @@ where
     keccak256(&eth_message).into()
 }
 
-pub fn attach_signature(signature: &SignatureRecid, transaction: &TransactionRequest) {
+pub fn attach_signature(_signature: &SignatureRecid, _transaction: &TransactionRequest) {
     todo!()
 }
 
@@ -97,9 +97,7 @@ where
         H256::from_slice(signature.s.to_bytes().as_ref()),
     );
 
-    let (signature, v) = rec
-        .as_signature()
-        .ok_or(anyhow!("failed take signature from recoverable"))?;
+    let (signature, v) = rec.as_signature().context("failed take signature from recoverable")?;
 
     let mut slice: [u8; 65] = [0u8; 65];
 
@@ -113,7 +111,7 @@ where
 }
 
 pub fn hash_to_bytes(hash: String) -> anyhow::Result<H256> {
-    Ok(H256::from_str(hash.as_str()).context("hash read")?)
+    H256::from_str(hash.as_str()).context("hash read")
 }
 
 /// Gets the checksummed address of a H160 hash

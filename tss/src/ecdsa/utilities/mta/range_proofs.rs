@@ -273,7 +273,7 @@ pub struct BobCheck {
 }
 
 /// Bob's regular proof
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct BobProof {
     t: BigInt,
     z: BigInt,

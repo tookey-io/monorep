@@ -10,14 +10,21 @@ impl fmt::Debug for super::OfflineStage {
 
 #[derive(Debug)]
 pub struct OfflineStageProgress {
+    #[allow(dead_code)]
     round: OfflineR,
 
+    #[allow(dead_code)]
     round1_msgs: ReceivedMessages,
+    #[allow(dead_code)]
     round2_msgs: ReceivedMessages,
+    #[allow(dead_code)]
     round3_msgs: ReceivedMessages,
+    #[allow(dead_code)]
     round4_msgs: ReceivedMessages,
+    #[allow(dead_code)]
     round5_msgs: ReceivedMessages,
 
+    #[allow(dead_code)]
     msgs_queue: OutgoingMessages,
 }
 
@@ -121,5 +128,6 @@ impl fmt::Debug for ReceivedMessages {
 
 #[derive(Debug)]
 pub struct OutgoingMessages {
+    #[allow(dead_code)]
     len: usize,
 }

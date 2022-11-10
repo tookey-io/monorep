@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use curv::{arithmetic::Converter, elliptic::curves::Secp256k1, BigInt};
+use curv::{elliptic::curves::Secp256k1, BigInt};
 use derive_more::TryInto;
 use futures::{channel::mpsc::channel, FutureExt, Sink, SinkExt, Stream, StreamExt, TryStreamExt};
 use round_based::{AsyncProtocol, Msg};
@@ -12,6 +12,7 @@ use tss::ecdsa::{
 };
 
 #[derive(TryInto)]
+#[allow(clippy::large_enum_variant)]
 pub enum Messages {
     OfflineStage(Msg<OfflineProtocolMessage>),
     PartialSignature(Msg<PartialSignature>),
@@ -32,7 +33,7 @@ where
         .iter()
         .position(|p| *p == local_share.i)
         .map(|v| v + 1)
-        .ok_or(anyhow!("Not in party"))? as u16;
+        .context("Not in party")? as u16;
 
     let number_of_parties = parties.len();
 
@@ -46,10 +47,8 @@ where
     let (mut incoming_partial_sender, incoming_partial_receiver) = channel::<Result<_, SignError>>(102400);
     let (mut outgoing_partial_sender, outgoing_partial_receiver) = channel(102400);
 
-    let outgoing_offline_receiver = outgoing_offline_receiver.map(|msg| Messages::OfflineStage(msg)).boxed();
-    let outgoing_partial_receiver = outgoing_partial_receiver
-        .map(|msg| Messages::PartialSignature(msg))
-        .boxed();
+    let outgoing_offline_receiver = outgoing_offline_receiver.map(Messages::OfflineStage).boxed();
+    let outgoing_partial_receiver = outgoing_partial_receiver.map(Messages::PartialSignature).boxed();
 
     let outgoin_stream = futures::stream::select_all(vec![outgoing_offline_receiver, outgoing_partial_receiver]);
 
@@ -97,7 +96,7 @@ where
         let completed_offline_stage = protocol
             .run()
             .await
-            .map_err(|e| anyhow!("protocol execution terminated with error: {}", e))?;
+            .map_err(|e| anyhow!("protocol execution terminated with error: {:?}", e))?;
 
         let (signing, partial_signature) = SignManual::new(hash, completed_offline_stage)?;
 

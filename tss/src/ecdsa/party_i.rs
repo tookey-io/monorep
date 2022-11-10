@@ -366,7 +366,7 @@ impl Keys {
         let mut global_coefficients = head[0].commitments.clone();
         for vss in tail {
             for (i, coefficient_commitment) in vss.commitments.iter().enumerate() {
-                global_coefficients[i] = &global_coefficients[i] + &*coefficient_commitment;
+                global_coefficients[i] = &global_coefficients[i] + coefficient_commitment.clone();
             }
         }
 
@@ -684,6 +684,7 @@ impl LocalSignature {
         PDLwSlackProof::prove(&pdl_w_slack_witness, &pdl_w_slack_statement)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn phase5_verify_pdl(
         pdl_w_slack_proof_vec: &[PDLwSlackProof],
         R_dash: &Point<Secp256k1>,
@@ -840,8 +841,8 @@ impl LocalSignature {
          1. id = R.y & 1
          2. if (s > curve.q / 2) id = id ^ 1
         */
-        let is_ry_odd = ry.test_bit(0);
-        let mut recid = if is_ry_odd { 1 } else { 0 };
+        let is_ry_odd: bool = ry.test_bit(0);
+        let mut recid = u8::from(is_ry_odd);
         let s_tag_bn = Scalar::<Secp256k1>::group_order() - &s_bn;
         if s_bn > s_tag_bn {
             s = Scalar::<Secp256k1>::from(&s_tag_bn);
