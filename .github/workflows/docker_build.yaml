@@ -44,6 +44,6 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           push: true
-          tags: registry.digitalocean.com/tookey/${{ github.event.repository.name }}:$GIT_BRANCH-${{ github.sha }}
+          tags: registry.digitalocean.com/tookey/${{ github.event.repository.name }}:${{ env.GIT_BRANCH }}-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

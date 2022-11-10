@@ -2,8 +2,7 @@
 .git
 /target
 
-local-share*.json
-/key*.json
+/keys
 
 docker-compose*
 Makefile

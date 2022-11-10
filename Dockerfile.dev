@@ -1,7 +1,3 @@
-##
-# Build binary
-##
-
 FROM rust:1.65
 
 WORKDIR /app
