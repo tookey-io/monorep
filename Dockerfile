@@ -1,17 +1,39 @@
-FROM rust:1.65 as builder
+# Base rust image (configured with rust_toolchain)
+FROM debian:bullseye-slim AS rust_base
+COPY rust-toolchain /
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates libssl1.1 libssl-dev pkg-config libudev-dev curl build-essential gcc gcc-multilib git openssh-client libgmp-dev && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /rustup.sh && chmod +x /rustup.sh && \
+    /rustup.sh --default-toolchain `cat rust-toolchain` -y && \
+    ln -s /root/.cargo/bin/cargo /usr/bin/
 
 WORKDIR /app
+RUN cargo install cargo-chef --locked
 
-COPY . /app/
+##
+# Prepare dependency file
+##
+FROM rust_base as planner
+COPY . /app
+RUN cargo chef prepare --recipe-path recipe.json
+
+##
+# Install dependencies and build applications
+##
+FROM rust_base as builder
+
+# Build dependencies - this is the caching Docker layer!
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Build actual executables
+COPY . /app
 RUN cargo build --release
 
-CMD ["/app/target/release/manager"]
-
 ##
-# Prepare environment
+# Prepare executables
 ##
-
-FROM debian:buster-slim
+FROM debian:bullseye-slim
 
 ENV TZ=Etc/UTC
 ENV ROCKET_ADDRESS=0.0.0.0
@@ -22,12 +44,9 @@ RUN useradd -u 1000 -s /bin/bash -M -d /app monal && \
     \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    tzdata ca-certificates netcat-openbsd wget libssl1.1 && \
+    tzdata ca-certificates netcat-openbsd curl libssl1.1 libgmp-dev && \
     \
     rm -rf /var/lib/apt/lists/* && rm -rf /var/lib/apt/lists.d/* && apt-get autoremove -y && apt-get clean && apt-get autoclean
-
-RUN mkdir -p /app/bin && \
-    wget https://github.com/EmperDeon/healthcheck/releases/download/v0.1.1/healthcheck-linux-amd64 -O /app/bin/healthcheck --quiet
 
 WORKDIR /app
 COPY --from=builder /app/target/release/manager /app/target/release/relay /app/
