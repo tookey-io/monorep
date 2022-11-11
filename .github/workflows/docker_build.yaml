@@ -3,8 +3,8 @@ name: docker_build
 on:
   push:
     branches:
-      - 'master'
-      - 'feature/ci-cd'
+      - main
+#      - 'feature/ci-cd'
 
 jobs:
   docker_build:
