@@ -1,0 +1,27 @@
+[package]
+name = "tss_nodejs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+napi = { version = "2.10", features = ["async", "anyhow", "serde-json"] }
+napi-derive = "2"
+tss = { path = "../tss" }
+tss_ceremonies = { path = "../ceremonies", default_features = false, features = ['ecdsa'] }
+
+# Keygen
+curv-kzen = { version = "0.9", default-features = false, features = ["rust-gmp-kzen"] }
+round-based = { version = "0.1.4", features = ["dev"] }
+futures = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ethereum-types = { version = "0.12.1" }
+
+[build-dependencies]
+napi-build = "2"
+
+[lib]
+crate-type = ["cdylib"]

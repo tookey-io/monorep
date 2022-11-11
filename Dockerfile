@@ -28,7 +28,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build actual executables
 COPY . /app
-RUN cargo build --release
+RUN cargo build --release --bin relay --bin manager
 
 ##
 # Prepare executables

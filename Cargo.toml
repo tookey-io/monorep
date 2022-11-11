@@ -6,6 +6,7 @@ codegen-units = 1
 members = [
     "tss",
     "tss-ffi",
+    "tss-nodejs",
     "manager",
     "relay",
     "cli",
