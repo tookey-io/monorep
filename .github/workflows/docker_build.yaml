@@ -1,10 +1,10 @@
-name: docker_build
+name: Docker build
 
 on:
   push:
     branches:
       - main
-#      - 'feature/ci-cd'
+      - feature/ci-cd
 
 jobs:
   docker_build:

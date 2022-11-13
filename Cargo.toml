@@ -4,12 +4,8 @@ codegen-units = 1
 
 [workspace]
 members = [
-    "tss",
-    "tss-ffi",
-    "tss-nodejs",
     "manager",
     "relay",
     "cli",
-    "ceremonies",
     "adapters/*"
 ]

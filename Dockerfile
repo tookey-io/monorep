@@ -44,7 +44,7 @@ RUN useradd -u 1000 -s /bin/bash -M -d /app monal && \
     \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    tzdata ca-certificates netcat-openbsd curl libssl1.1 libgmp-dev && \
+    tzdata ca-certificates netcat-openbsd libgmp-dev && \
     \
     rm -rf /var/lib/apt/lists/* && rm -rf /var/lib/apt/lists.d/* && apt-get autoremove -y && apt-get clean && apt-get autoclean
 
