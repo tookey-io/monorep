@@ -28,6 +28,7 @@ services:
 
   relay:
     container_name: 2k_relay
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile.dev
@@ -45,7 +46,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    command: [ "/bin/sh", "-c", "sleep 10 && cargo watch -w ./manager -s 'cargo run --bin manager'" ]
+    restart: unless-stopped
+    command: [ "/bin/sh", "-c", "sleep 30 && cargo watch -w ./manager -s 'cargo run --bin manager'" ]
     environment:
       RELAY_ADDRESS: 'http://2k_relay:8000'
       AMQP_ADDRESS: 'amqp://guest:guest@2k_rabbitmq:5672//'
