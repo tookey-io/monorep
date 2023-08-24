@@ -1,24 +1,12 @@
-use std::str::FromStr;
-use std::time::Duration;
-
-use anyhow::Context;
-use futures::SinkExt;
-use futures::StreamExt;
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::time::sleep;
-use tookey_libtss::ceremonies;
-use tookey_libtss::curv::arithmetic::Converter;
-use tookey_libtss::curv::BigInt;
-use tookey_libtss::ecdsa::state_machine::sign::{OfflineProtocolMessage, PartialSignature};
-use tookey_libtss::ethereum_types::H256;
-use tookey_libtss::join::join_computation;
-use tookey_libtss::round_based::Msg;
 
 use crate::amqp::{amqp_send_notification, AmqpPool};
 use crate::config::Config;
 use crate::keygen::TaskStatus;
 use crate::secrets::fetch_key;
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct SignParams {
@@ -36,122 +24,41 @@ struct SignParams {
 }
 
 pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
+  log::trace!("sign_approve, params: {:?}", params);
   let params: SignParams = serde_json::from_value(params)?;
-
-  let (_i, incoming, outgoing) = join_computation(params.relay_address.parse()?, params.room_id.as_str())
-    .await
-    .context("join computation")?;
 
   let key = fetch_key(&params.user_id, &params.key_id).await?;
 
-  // Notify about sign start if first user
-  if key.i == 1 {
-    send_sign_status(
-      pool.clone(),
-      params.room_id.clone(),
-      TaskStatus::Created,
-      Some(vec![key.i]),
-      None,
-    )
-    .await?;
-  }
+  send_sign_status(
+    pool.clone(),
+    params.room_id.clone(),
+    TaskStatus::Created,
+    Some(vec![key.i]),
+    None,
+  )
+  .await?;
 
-  // Collect senders and send progress statuses
-  let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<u16>();
-  let incoming = incoming.map(move |item: anyhow::Result<Msg<Value>>| {
-    if let Ok(i) = &item {
-      // Ignore errors
-      let _ = sender.send(i.sender);
-    }
+  let result = tookey_libtss::sign::sign(tookey_libtss::sign::SignParams {
+    room_id: params.room_id.clone(),
+    key: serde_json::to_string(&key)?,
+    data: params.data,
+    participants_indexes: params.participants_indexes.clone(),
+    relay_address: params.relay_address,
+    timeout_seconds: params.timeout_seconds as u16,
+  })
+  .await;
 
-    item
-  });
-
-  let params_clone = params.clone();
-  let pool_clone = pool.clone();
-  tokio::spawn(async move {
-    let mut active = Vec::new();
-    active.push(1);
-
-    while let Some(v) = receiver.recv().await {
-      if !active.contains(&v) {
-        active.push(v);
-
-        let result = send_sign_status(
-          pool_clone.clone(),
-          params_clone.room_id.clone(),
-          TaskStatus::Started,
-          Some(active.clone()),
-          None,
-        )
-        .await;
-        if let Err(err) = result {
-          log::error!("Failed to send keygen status: {:?}", err)
-        }
-      }
-    }
-  });
-
-  // Proceed with protocol
-  let incoming = incoming.filter_map(|msg| async move {
-    match msg {
-      Ok(msg) => {
-        // TODO: fix coping
-        let json = msg.body.clone();
-        let possible_offline = serde_json::from_value::<OfflineProtocolMessage>(json.clone());
-        let possible_partial = serde_json::from_value::<PartialSignature>(json);
-
-        let wrapped_msg = match (possible_offline, possible_partial) {
-          (Ok(offline), _) => ceremonies::Messages::OfflineStage(msg.map_body(|_| offline)),
-          (_, Ok(partial)) => ceremonies::Messages::PartialSignature(msg.map_body(|_| partial)),
-          _ => unreachable!(),
-        };
-
-        Some(Ok(wrapped_msg))
-      }
-      Err(e) => Some(Err(e)),
-    }
-  });
-
-  tokio::pin!(outgoing);
-
-  let outgoing_sender = futures::sink::unfold(outgoing, |mut outgoing, msg| async move {
-    let packet = match msg {
-      ceremonies::Messages::OfflineStage(msg) => msg.map_body(|body| serde_json::to_value(body).unwrap_or(Value::Null)),
-      ceremonies::Messages::PartialSignature(msg) => {
-        msg.map_body(|body| serde_json::to_value(body).unwrap_or(Value::Null))
-      }
-    };
-
-    outgoing.send(packet).await.context("sending")?;
-
-    Ok::<_, anyhow::Error>(outgoing)
-  });
-
-  let hash = BigInt::from_bytes(H256::from_str(params.data.as_str()).context("hash read")?.as_bytes());
-
-  let signature_future = ceremonies::sign(
-    outgoing_sender,
-    incoming,
-    key,
-    params.participants_indexes.clone(),
-    hash,
-  );
-  let signature = match tokio::time::timeout(Duration::from_secs(params.timeout_seconds), signature_future).await {
-    Ok(result) => match result {
-      Ok(sign) => sign,
-      Err(err) => {
-        send_sign_status(pool.clone(), params.room_id, TaskStatus::Error, None, None).await?;
-        return Err(err);
-      }
-    },
-    Err(_) => {
-      send_sign_status(pool.clone(), params.room_id, TaskStatus::Timeout, None, None).await?;
-      return Err(anyhow::anyhow!("Timed out"));
-    }
-  };
-
-  let signature = serde_json::to_string(&signature).context("serialize signature")?;
+  let signature = match result {
+    tookey_libtss::sign::SignResult {
+      result: Some(result),
+      error: None,
+    } => Ok(result),
+    tookey_libtss::sign::SignResult {
+      result: None,
+      error: Some(err),
+    } => Err(anyhow!(err)),
+    _ => Err(anyhow!("unreachable")),
+  }?;
 
   send_sign_status(
     pool.clone(),
@@ -161,9 +68,6 @@ pub async fn sign_approve(params: Value, pool: AmqpPool) -> anyhow::Result<()> {
     Some(signature),
   )
   .await?;
-
-  // Wait for outgoing messages to be flushed
-  sleep(Duration::from_millis(1000)).await;
 
   Ok(())
 }

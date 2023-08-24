@@ -24,4 +24,8 @@ bb8-lapin = "^0.4.0"
 # Hashicorp Vault
 vaultrs = "=0.6.0"
 
-tookey-libtss = { version = "1.0", default-features = false, features = ["gmp"] }
+tookey-libtss = { version = "1.2.1", default-features = false, features = ["gmp", "noop"] }
+# [dependencies.tookey-libtss]
+# path = "../../libtss"
+# default-features = false
+# features = ["gmp", "noop"]

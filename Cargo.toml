@@ -6,6 +6,5 @@ codegen-units = 1
 members = [
     "manager",
     "relay",
-    "cli",
     "adapters/*"
 ]

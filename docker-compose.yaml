@@ -50,7 +50,7 @@ services:
     command: [ "/bin/sh", "-c", "sleep 30 && cargo watch -w ./manager -s 'cargo run --bin manager'" ]
     environment:
       RELAY_ADDRESS: 'http://2k_relay:8000'
-      AMQP_ADDRESS: 'amqp://guest:guest@2k_rabbitmq:5672//'
+      AMQP_ADDRESS: 'amqp://guest:guest@2k_rabbitmq:5672'
       VAULT_ADDRESS: 'http://2k_vault:8200'
     volumes:
       - ./manager:/app/manager:ro
